@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { compressToGrayscaleJpeg } from "@/lib/imageCompression";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
+import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
 
@@ -16,8 +17,12 @@ export default function ReportPage() {
   const [gender, setGender] = useState("");
   const [age, setAge] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  const [status, setStatus] = useState<LifeStatus>("missing");
   const [locationCategory, setLocationCategory] = useState(locationOptions[0]);
   const [locationDetail, setLocationDetail] = useState("");
+  const [lastKnownState, setLastKnownState] = useState("");
+  const [lastKnownCity, setLastKnownCity] = useState("");
+  const [lastKnownParish, setLastKnownParish] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,27 +68,34 @@ export default function ReportPage() {
         gender,
         age: Number(age),
         birth_date: birthDate,
+        status,
         location_category: locationCategory,
         location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
+        last_known_state: lastKnownState || null,
+        last_known_city: lastKnownCity.trim() || null,
+        last_known_parish: lastKnownParish.trim() || null,
         image_url: imageUrl,
-        is_minor: isMinor,
-        status: "missing"
+        is_minor: isMinor
       });
 
       if (error) throw error;
 
-      setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar información.");
+      setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       setFullName("");
       setCedula("");
       setGender("");
       setAge("");
       setBirthDate("");
+      setStatus("missing");
       setLocationCategory(locationOptions[0]);
       setLocationDetail("");
+      setLastKnownState("");
+      setLastKnownCity("");
+      setLastKnownParish("");
       setPhoto(null);
       setStep(1);
     } catch {
-      setMessage("No se pudo enviar el reporte. Revisa la conexión e intenta de nuevo.");
+      setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
@@ -99,21 +111,33 @@ export default function ReportPage() {
           <span className="rounded-md border border-neutral-300 px-3 py-1 text-sm font-bold">Paso {step} de 3</span>
         </header>
 
-        <h1 className="text-3xl font-black">Reportar Persona Desaparecida</h1>
-        <p className="mt-2 leading-7 text-neutral-700">Completa sólo lo que conozcas con seguridad. La foto será reducida en este dispositivo antes de subirla.</p>
+        <h1 className="text-3xl font-black">Reportar Persona</h1>
+        <p className="mt-2 leading-7 text-neutral-700">
+          Completa solo lo que conozcas con seguridad. La foto sera reducida en este dispositivo antes de subirla.
+        </p>
 
         <form className="mt-6 grid gap-5" onSubmit={submitReport}>
           {step === 1 ? (
             <section className="grid gap-4">
               <TextField label="Nombre completo" onChange={setFullName} required value={fullName} />
-              <TextField label="Cédula de Identidad" onChange={setCedula} required value={cedula} />
+              <TextField label="Cedula de Identidad" onChange={setCedula} required value={cedula} />
               <label className="grid gap-2 font-bold">
-                Género
+                Genero
                 <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setGender(event.target.value)} required value={gender}>
                   <option value="">Seleccionar</option>
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
                   <option value="otro">Otro / no especificado</option>
+                </select>
+              </label>
+              <label className="grid gap-2 font-bold">
+                Estado de vida
+                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setStatus(event.target.value as LifeStatus)} value={status}>
+                  {Object.entries(statusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </label>
             </section>
@@ -123,7 +147,7 @@ export default function ReportPage() {
             <section className="grid gap-4">
               <TextField label="Edad" min="0" onChange={setAge} required type="number" value={age} />
               <TextField label="Fecha de nacimiento" onChange={setBirthDate} required type="date" value={birthDate} />
-              {isMinor ? <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">El reporte será marcado como menor de edad.</p> : null}
+              {isMinor ? <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">El reporte sera marcado como menor de edad.</p> : null}
               <label className="grid gap-2 font-bold">
                 Foto opcional
                 <input
@@ -138,8 +162,14 @@ export default function ReportPage() {
 
           {step === 3 ? (
             <section className="grid gap-4">
+              {status === "deceased" ? (
+                <p className="rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold text-neutral-700">
+                  Para reportes de personas fallecidas, agrega si puedes el ultimo estado, ciudad y parroquia donde fue vista, extraviada o localizada.
+                </p>
+              ) : null}
+
               <label className="grid gap-2 font-bold">
-                Ubicación o institución
+                Ubicacion o institucion
                 <select
                   className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
                   onChange={(event) => setLocationCategory(event.target.value)}
@@ -154,15 +184,28 @@ export default function ReportPage() {
                 </select>
               </label>
               <label className="grid gap-2 font-bold">
-                Detalle de ubicación
+                Detalle de ubicacion
                 <textarea
-                  className="focus-ring min-h-28 rounded-md border border-neutral-400 bg-white px-3 py-3"
+                  className="focus-ring min-h-24 rounded-md border border-neutral-400 bg-white px-3 py-3"
                   onChange={(event) => setLocationDetail(event.target.value)}
                   placeholder={locationCategory === "Otro..." ? "Escribe el lugar conocido" : "Nombre del centro, ciudad o referencia"}
                   required={locationCategory === "Otro..."}
                   value={locationDetail}
                 />
               </label>
+              <label className="grid gap-2 font-bold">
+                Estado donde fue extraviada o ultimo lugar conocido
+                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setLastKnownState(event.target.value)} value={lastKnownState}>
+                  <option value="">No especificado</option>
+                  {stateOptions.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <TextField label="Ciudad opcional" onChange={setLastKnownCity} value={lastKnownCity} />
+              <TextField label="Parroquia opcional" onChange={setLastKnownParish} value={lastKnownParish} />
             </section>
           ) : null}
 
@@ -177,7 +220,7 @@ export default function ReportPage() {
                 Continuar
               </button>
             ) : (
-              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white" disabled={isSubmitting} type="submit">
+              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting} type="submit">
                 {isSubmitting ? "Enviando..." : "Enviar Reporte"}
               </button>
             )}

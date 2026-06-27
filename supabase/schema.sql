@@ -20,6 +20,9 @@ create table if not exists public.missing_persons (
   status public.person_status not null default 'missing',
   location_category text not null check (location_category in ('Hospital', 'Sede Policial', 'Refugio Temporal', 'Escuela Habilitada', 'Otro...')),
   location_detail text,
+  last_known_state text,
+  last_known_city text,
+  last_known_parish text,
   image_url text,
   is_minor boolean not null,
   last_seen_at timestamptz not null default now(),
@@ -29,10 +32,15 @@ create table if not exists public.missing_persons (
   constraint missing_persons_exact_identity unique (cedula, birth_date)
 );
 
+alter table public.missing_persons add column if not exists last_known_state text;
+alter table public.missing_persons add column if not exists last_known_city text;
+alter table public.missing_persons add column if not exists last_known_parish text;
+
 create index if not exists missing_persons_cedula_idx on public.missing_persons (cedula);
 create index if not exists missing_persons_birth_date_idx on public.missing_persons (birth_date);
 create index if not exists missing_persons_exact_search_idx on public.missing_persons (cedula, birth_date);
 create index if not exists missing_persons_status_idx on public.missing_persons (status);
+create index if not exists missing_persons_last_known_state_idx on public.missing_persons (last_known_state);
 
 create or replace function public.set_missing_persons_updated_at()
 returns trigger
@@ -60,8 +68,7 @@ on public.missing_persons
 for insert
 to anon
 with check (
-  status = 'missing'
-  and is_minor = (age < 18)
+  is_minor = (age < 18)
   and char_length(trim(cedula)) between 4 and 30
   and char_length(trim(full_name)) between 2 and 180
 );
@@ -83,6 +90,9 @@ returns table (
   status public.person_status,
   location_category text,
   location_detail text,
+  last_known_state text,
+  last_known_city text,
+  last_known_parish text,
   image_url text,
   is_minor boolean,
   last_seen_at timestamptz
@@ -104,6 +114,15 @@ as $$
       when mp.is_minor then null
       else mp.location_detail
     end as location_detail,
+    mp.last_known_state,
+    case
+      when mp.is_minor then null
+      else mp.last_known_city
+    end as last_known_city,
+    case
+      when mp.is_minor then null
+      else mp.last_known_parish
+    end as last_known_parish,
     case
       when mp.is_minor then null
       else mp.image_url
@@ -114,6 +133,30 @@ as $$
   where mp.cedula = trim(search_cedula)
     and mp.birth_date = search_birth_date
   limit 1;
+$$;
+
+create or replace function public.get_public_state_stats()
+returns table (
+  state text,
+  missing bigint,
+  found_alive bigint,
+  deceased bigint,
+  critical_health bigint
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select
+    coalesce(nullif(trim(last_known_state), ''), 'Sin especificar') as state,
+    count(*) filter (where status = 'missing') as missing,
+    count(*) filter (where status = 'found_alive') as found_alive,
+    count(*) filter (where status = 'deceased') as deceased,
+    count(*) filter (where status = 'critical_health') as critical_health
+  from public.missing_persons
+  group by coalesce(nullif(trim(last_known_state), ''), 'Sin especificar')
+  order by state;
 $$;
 
 create or replace function public.get_public_stats()
@@ -134,8 +177,10 @@ $$;
 
 revoke all on function public.search_missing_person(text, date) from public;
 revoke all on function public.get_public_stats() from public;
+revoke all on function public.get_public_state_stats() from public;
 grant execute on function public.search_missing_person(text, date) to anon;
 grant execute on function public.get_public_stats() to anon;
+grant execute on function public.get_public_state_stats() to anon;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('person-photos', 'person-photos', true, 51200, array['image/jpeg'])

@@ -40,7 +40,7 @@ export default function SearchPage() {
 
       setResult(match);
     } catch {
-      setMessage("La búsqueda no pudo completarse. Intenta de nuevo cuando tengas conexión.");
+      setMessage("La busqueda no pudo completarse. Intenta de nuevo cuando tengas conexion.");
     } finally {
       setIsSearching(false);
     }
@@ -56,11 +56,11 @@ export default function SearchPage() {
         </header>
 
         <h1 className="text-3xl font-black">Buscar un Familiar</h1>
-        <p className="mt-2 leading-7 text-neutral-700">Por seguridad, sólo se muestran resultados con cédula y fecha de nacimiento exactas.</p>
+        <p className="mt-2 leading-7 text-neutral-700">Por seguridad, solo se muestran resultados con cedula y fecha de nacimiento exactas.</p>
 
         <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={search}>
           <label className="grid gap-2 font-bold">
-            Cédula de Identidad
+            Cedula de Identidad
             <input className="focus-ring rounded-md border border-neutral-400 px-3 py-3" onChange={(event) => setCedula(event.target.value)} required value={cedula} />
           </label>
           <label className="grid gap-2 font-bold">
@@ -89,10 +89,10 @@ export default function SearchPage() {
             ) : null}
             <p className="text-sm font-bold uppercase text-neutral-600">{statusLabels[result.status] ?? result.status}</p>
             <h2 className="mt-1 text-2xl font-black">{result.full_name}</h2>
-            {result.is_minor ? <p className="mt-2 text-sm font-bold text-alert">Información limitada por protección de menor de edad.</p> : null}
+            {result.is_minor ? <p className="mt-2 text-sm font-bold text-alert">Informacion limitada por proteccion de menor de edad.</p> : null}
             <dl className="mt-4 grid gap-3">
               <div>
-                <dt className="text-sm font-bold text-neutral-600">Ubicación</dt>
+                <dt className="text-sm font-bold text-neutral-600">Ubicacion</dt>
                 <dd className="font-semibold">{result.location_category}</dd>
               </div>
               {result.location_detail ? (
@@ -101,8 +101,16 @@ export default function SearchPage() {
                   <dd className="font-semibold">{result.location_detail}</dd>
                 </div>
               ) : null}
+              {result.last_known_state ? (
+                <div>
+                  <dt className="text-sm font-bold text-neutral-600">Ultimo estado conocido</dt>
+                  <dd className="font-semibold">
+                    {[result.last_known_state, result.last_known_city, result.last_known_parish].filter(Boolean).join(", ")}
+                  </dd>
+                </div>
+              ) : null}
               <div>
-                <dt className="text-sm font-bold text-neutral-600">Última actualización</dt>
+                <dt className="text-sm font-bold text-neutral-600">Ultima actualizacion</dt>
                 <dd className="font-semibold">{new Date(result.last_seen_at).toLocaleString("es-VE")}</dd>
               </div>
             </dl>

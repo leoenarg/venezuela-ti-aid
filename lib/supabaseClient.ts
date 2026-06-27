@@ -26,6 +26,9 @@ export type SearchResult = {
   status: MissingStatus;
   location_category: string;
   location_detail: string | null;
+  last_known_state: string | null;
+  last_known_city: string | null;
+  last_known_parish: string | null;
   image_url: string | null;
   is_minor: boolean;
   last_seen_at: string;
