@@ -48,38 +48,43 @@ export function VenezuelaRiskMap({ stateStats }: Props) {
         </div>
 
         <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-neutral-200 bg-slate-50">
-          <svg className="block h-auto w-[700px] max-w-none lg:w-full" role="img" aria-label="Mapa simplificado de Venezuela por riesgo sismico" viewBox="0 0 720 560">
-            <rect fill="#f8fafc" height="560" rx="18" width="720" />
+          <svg className="block h-auto w-[760px] max-w-none lg:w-full" role="img" aria-label="Mapa simplificado de Venezuela por riesgo sismico" viewBox="0 0 740 570">
+            <rect fill="#f8fafc" height="570" rx="18" width="740" />
+            <path
+              d="M43 130 L82 82 L126 75 L215 55 L252 88 L392 86 L544 58 L604 48 L638 62 L620 84 L684 82 L704 120 L648 150 L590 118 L632 170 L694 236 L704 334 L626 376 L554 492 L398 510 L388 552 L238 552 L112 464 L34 364 L54 332 L58 292 L76 260 L43 208 Z"
+              fill="#ffffff"
+              opacity="0.65"
+              stroke="#0f172a"
+              strokeLinejoin="round"
+              strokeWidth="4"
+            />
             {venezuelaStates.map((state) => {
               const fill = riskColors[state.risk];
               const isSelected = selectedCode === state.code;
 
               return (
                 <g key={state.code}>
-                  <rect
+                  <path
                     aria-label={`${state.name}: ${riskLabels[state.risk]}`}
-                    className="cursor-pointer transition duration-150 hover:stroke-ink focus:outline-none"
+                    className="cursor-pointer transition duration-150 hover:brightness-95 focus:outline-none"
+                    d={state.path}
                     fill={fill}
-                    height={state.height}
                     onBlur={() => undefined}
                     onFocus={() => setSelectedCode(state.code)}
                     onMouseEnter={() => setSelectedCode(state.code)}
-                    rx="8"
                     stroke={isSelected ? "#151515" : "#737373"}
+                    strokeLinejoin="round"
                     strokeWidth={isSelected ? 3 : 1.3}
                     tabIndex={0}
-                    width={state.width}
-                    x={state.x}
-                    y={state.y}
                   >
                     <title>{`${state.name} - ${riskLabels[state.risk]} - ${state.cities.join(", ")}`}</title>
-                  </rect>
+                  </path>
                   <text
-                    className="pointer-events-none select-none text-[10px] font-bold"
+                    className="pointer-events-none select-none text-[10px] font-black"
                     fill={state.risk >= 5 ? "#ffffff" : "#151515"}
                     textAnchor="middle"
-                    x={state.x + state.width / 2}
-                    y={state.y + state.height / 2 + 4}
+                    x={state.labelX}
+                    y={state.labelY}
                   >
                     {shortName(state.name)}
                   </text>
