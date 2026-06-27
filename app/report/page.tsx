@@ -24,6 +24,7 @@ export default function ReportPage() {
   const [lastKnownCity, setLastKnownCity] = useState("");
   const [lastKnownParish, setLastKnownParish] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,7 +76,9 @@ export default function ReportPage() {
         last_known_city: lastKnownCity.trim() || null,
         last_known_parish: lastKnownParish.trim() || null,
         image_url: imageUrl,
-        is_minor: isMinor
+        is_minor: isMinor,
+        accepted_terms: acceptedTerms,
+        terms_version: "2026-06-27"
       });
 
       if (error) throw error;
@@ -93,6 +96,7 @@ export default function ReportPage() {
       setLastKnownCity("");
       setLastKnownParish("");
       setPhoto(null);
+      setAcceptedTerms(false);
       setStep(1);
     } catch {
       setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
@@ -206,6 +210,22 @@ export default function ReportPage() {
               </label>
               <TextField label="Ciudad opcional" onChange={setLastKnownCity} value={lastKnownCity} />
               <TextField label="Parroquia opcional" onChange={setLastKnownParish} value={lastKnownParish} />
+              <label className="flex gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6">
+                <input
+                  checked={acceptedTerms}
+                  className="mt-1 h-5 w-5"
+                  onChange={(event) => setAcceptedTerms(event.target.checked)}
+                  required
+                  type="checkbox"
+                />
+                <span>
+                  Confirmo que envio esta informacion de buena fe para fines humanitarios y acepto los{" "}
+                  <Link className="font-black text-signal underline" href="/legal" target="_blank">
+                    terminos, privacidad y colaboracion
+                  </Link>
+                  .
+                </span>
+              </label>
             </section>
           ) : null}
 
@@ -220,7 +240,7 @@ export default function ReportPage() {
                 Continuar
               </button>
             ) : (
-              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting} type="submit">
+              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !acceptedTerms} type="submit">
                 {isSubmitting ? "Enviando..." : "Enviar Reporte"}
               </button>
             )}

@@ -25,6 +25,8 @@ create table if not exists public.missing_persons (
   last_known_parish text,
   image_url text,
   is_minor boolean not null,
+  accepted_terms boolean not null default false,
+  terms_version text,
   last_seen_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -35,6 +37,8 @@ create table if not exists public.missing_persons (
 alter table public.missing_persons add column if not exists last_known_state text;
 alter table public.missing_persons add column if not exists last_known_city text;
 alter table public.missing_persons add column if not exists last_known_parish text;
+alter table public.missing_persons add column if not exists accepted_terms boolean not null default false;
+alter table public.missing_persons add column if not exists terms_version text;
 
 create index if not exists missing_persons_cedula_idx on public.missing_persons (cedula);
 create index if not exists missing_persons_birth_date_idx on public.missing_persons (birth_date);
@@ -69,6 +73,8 @@ for insert
 to anon
 with check (
   is_minor = (age < 18)
+  and accepted_terms = true
+  and terms_version is not null
   and char_length(trim(cedula)) between 4 and 30
   and char_length(trim(full_name)) between 2 and 180
 );

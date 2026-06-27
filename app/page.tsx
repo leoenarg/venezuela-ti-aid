@@ -48,9 +48,14 @@ export default function HomePage() {
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between border-b border-neutral-300 pb-4">
           <p className="text-sm font-bold uppercase tracking-wide text-signal">venezuela-ti-aid</p>
-          <button className="focus-ring text-sm font-semibold underline" onClick={() => setTermsOpen(true)} type="button">
-            Terminos
-          </button>
+          <div className="flex items-center gap-4 text-sm font-semibold">
+            <Link className="focus-ring underline" href="/legal">
+              Legal
+            </Link>
+            <button className="focus-ring underline" onClick={() => setTermsOpen(true)} type="button">
+              Resumen
+            </button>
+          </div>
         </header>
 
         <div className="grid flex-1 content-start gap-8 py-10">
@@ -105,6 +110,9 @@ function TermsModal({ onClose }: { onClose: () => void }) {
         <p className="mt-3 leading-7 text-neutral-700">
           Toda busqueda requiere coincidencia exacta de cedula y fecha de nacimiento. El mal uso de la plataforma puede poner en riesgo a personas vulnerables.
         </p>
+        <Link className="focus-ring mt-5 block rounded-md border-2 border-ink px-4 py-3 text-center font-bold" href="/legal" onClick={onClose}>
+          Ver terminos completos
+        </Link>
         <button className="focus-ring mt-5 w-full rounded-md bg-ink px-4 py-3 font-bold text-white" onClick={onClose} type="button">
           Entendido
         </button>
