@@ -44,7 +44,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen overflow-x-hidden">
       <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6">
         <header className="flex items-center justify-between border-b border-neutral-300 pb-4">
           <p className="text-sm font-bold uppercase tracking-wide text-signal">venezuela-ti-aid</p>
@@ -58,15 +58,15 @@ export default function HomePage() {
           </div>
         </header>
 
-        <div className="grid flex-1 content-start gap-8 py-10">
-          <div className="max-w-3xl">
+        <div className="grid min-w-0 flex-1 content-start gap-8 py-10">
+          <div className="min-w-0 max-w-3xl">
             <h1 className="text-4xl font-black leading-tight text-ink sm:text-6xl">Ayuda humanitaria para encontrar familiares.</h1>
             <p className="mt-4 max-w-2xl text-lg leading-7 text-neutral-700">
               Reportes ciudadanos con busqueda privada por cedula y fecha de nacimiento. Sin directorios publicos de nombres.
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Estadisticas publicas">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Estadisticas publicas">
             {statLabels.map(([label, key]) => (
               <div className="rounded-md border border-neutral-300 bg-white p-4" key={key}>
                 <p className="text-sm font-semibold text-neutral-600">{label}</p>
@@ -75,7 +75,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2">
             <Link
               className="focus-ring rounded-md bg-signal px-5 py-4 text-center text-lg font-black text-white shadow-sm"
               href="/report"

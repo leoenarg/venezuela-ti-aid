@@ -33,10 +33,10 @@ export function VenezuelaRiskMap({ stateStats }: Props) {
   const selectedStats = statsByState.get(selectedState.name) ?? { state: selectedState.name, ...emptyStats };
 
   return (
-    <section className="grid gap-5 rounded-md border border-neutral-300 bg-white p-4 lg:grid-cols-[1.15fr_0.85fr]" aria-labelledby="map-title">
-      <div>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+    <section className="grid min-w-0 gap-5 rounded-md border border-neutral-300 bg-white p-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]" aria-labelledby="map-title">
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
             <h2 className="text-2xl font-black" id="map-title">
               Mapa de riesgo sismico
             </h2>
@@ -47,8 +47,8 @@ export function VenezuelaRiskMap({ stateStats }: Props) {
           <RiskLegend />
         </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <svg className="min-w-[700px]" role="img" aria-label="Mapa simplificado de Venezuela por riesgo sismico" viewBox="0 0 720 560">
+        <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-neutral-200 bg-slate-50">
+          <svg className="block h-auto w-[700px] max-w-none lg:w-full" role="img" aria-label="Mapa simplificado de Venezuela por riesgo sismico" viewBox="0 0 720 560">
             <rect fill="#f8fafc" height="560" rx="18" width="720" />
             {venezuelaStates.map((state) => {
               const fill = riskColors[state.risk];
@@ -90,7 +90,7 @@ export function VenezuelaRiskMap({ stateStats }: Props) {
         </div>
       </div>
 
-      <aside className="rounded-md border border-neutral-300 bg-paper p-4">
+      <aside className="min-w-0 rounded-md border border-neutral-300 bg-paper p-4">
         <p className="text-sm font-bold uppercase text-neutral-600">Estado seleccionado</p>
         <h3 className="mt-1 text-3xl font-black">{selectedState.name}</h3>
         <p className="mt-2 font-bold" style={{ color: selectedState.risk >= 5 ? "#7f1d1d" : "#991b1b" }}>
@@ -127,10 +127,10 @@ function StateStatsTable({
   const rows = stateStats.length > 0 ? venezuelaStates.filter((state) => statsByState.has(state.name)) : venezuelaStates.slice(0, 8);
 
   return (
-    <div className="lg:col-span-2">
+    <div className="min-w-0 lg:col-span-2">
       <h3 className="text-lg font-black">Personas reportadas por estado</h3>
-      <div className="mt-3 overflow-x-auto rounded-md border border-neutral-300">
-        <table className="w-full min-w-[640px] border-collapse bg-white text-sm">
+      <div className="mt-3 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-neutral-300">
+        <table className="w-full min-w-[560px] border-collapse bg-white text-sm">
           <thead className="bg-neutral-100 text-left">
             <tr>
               <th className="p-3">Estado</th>
