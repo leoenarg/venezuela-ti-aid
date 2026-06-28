@@ -1,48 +1,124 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { ReactNode, useState } from "react";
+import { useForm } from "react-hook-form";
+import { calculateAge, cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 import { compressToGrayscaleJpeg } from "@/lib/imageCompression";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
+const inputClass = "focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3";
 
 type Step = 1 | 2 | 3;
 
+// How much the reporter knows about the person's age:
+// - birthDate: exact birth date known -> age is derived automatically.
+// - ageOnly: only the age is known -> birth_date stays empty (null on submit).
+// - unknown: neither is known -> the flow must not be blocked.
+type AgeMode = "birthDate" | "ageOnly" | "unknown";
+
+type ReportForm = {
+  fullName: string;
+  cedula: string;
+  gender: string;
+  status: LifeStatus;
+  ageMode: AgeMode;
+  birthDate: string;
+  age: string;
+  locationCategory: string;
+  locationDetail: string;
+  lastKnownState: string;
+  lastKnownCity: string;
+  lastKnownParish: string;
+  acceptedTerms: boolean;
+};
+
+const ageModeLabels: Record<AgeMode, string> = {
+  birthDate: "Conozco la fecha de nacimiento",
+  ageOnly: "Solo conozco la edad",
+  unknown: "No conozco ninguno de los dos"
+};
+
 export default function ReportPage() {
   const [step, setStep] = useState<Step>(1);
-  const [fullName, setFullName] = useState("");
-  const [cedula, setCedula] = useState("");
-  const [gender, setGender] = useState("");
-  const [age, setAge] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [status, setStatus] = useState<LifeStatus>("missing");
-  const [locationCategory, setLocationCategory] = useState(locationOptions[0]);
-  const [locationDetail, setLocationDetail] = useState("");
-  const [lastKnownState, setLastKnownState] = useState("");
-  const [lastKnownCity, setLastKnownCity] = useState("");
-  const [lastKnownParish, setLastKnownParish] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
-  const canContinue =
-    (step === 1 && fullName.trim().length > 1 && cedula.trim().length > 3 && gender.length > 0) ||
-    (step === 2 && Number(age) >= 0 && birthDate.length > 0) ||
-    step === 3;
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    trigger,
+    clearErrors,
+    reset,
+    formState: { errors, isSubmitting }
+  } = useForm<ReportForm>({
+    mode: "onChange",
+    defaultValues: {
+      fullName: "",
+      cedula: "",
+      gender: "",
+      status: "missing",
+      ageMode: "birthDate",
+      birthDate: "",
+      age: "",
+      locationCategory: locationOptions[0],
+      locationDetail: "",
+      lastKnownState: "",
+      lastKnownCity: "",
+      lastKnownParish: "",
+      acceptedTerms: false
+    }
+  });
 
-  async function submitReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const ageMode = watch("ageMode");
+  const birthDate = watch("birthDate");
+  const ageInput = watch("age");
+  const locationCategory = watch("locationCategory");
+  const status = watch("status");
+
+  const derivedAge = ageMode === "birthDate" ? calculateAge(birthDate) : null;
+  const effectiveAge = ageMode === "birthDate" ? derivedAge : ageMode === "ageOnly" ? Number(ageInput) : null;
+  const isMinor = effectiveAge != null && effectiveAge >= 0 ? effectiveAge < 18 : false;
+
+  const cedulaField = register("cedula", cedulaRules);
+
+  function selectAgeMode(mode: AgeMode) {
+    setValue("ageMode", mode);
+    // Drop values that no longer apply so stale data is never submitted.
+    if (mode !== "birthDate") setValue("birthDate", "");
+    if (mode !== "ageOnly") setValue("age", "");
+    clearErrors(["birthDate", "age"]);
+  }
+
+  async function goNext() {
+    const fieldsByStep: Record<number, (keyof ReportForm)[]> = {
+      1: ["fullName", "cedula", "gender"],
+      2: ageMode === "birthDate" ? ["birthDate"] : ageMode === "ageOnly" ? ["age"] : []
+    };
+    const valid = await trigger(fieldsByStep[step] ?? []);
+    if (valid) setStep((step + 1) as Step);
+  }
+
+  async function onSubmit(data: ReportForm) {
     setMessage("");
-    setIsSubmitting(true);
 
     try {
       if (!hasSupabaseConfig) {
         throw new Error("Missing Supabase configuration.");
       }
+
+      const birthDateValue = data.ageMode === "birthDate" ? data.birthDate : null;
+      const ageValue =
+        data.ageMode === "birthDate"
+          ? calculateAge(data.birthDate)
+          : data.ageMode === "ageOnly"
+            ? Number(data.age)
+            : null;
+      const minor = ageValue != null ? ageValue < 18 : false;
 
       let imageUrl: string | null = null;
 
@@ -64,44 +140,32 @@ export default function ReportPage() {
       }
 
       const { error } = await supabase.from("missing_persons").insert({
-        full_name: fullName.trim(),
-        cedula: cedula.trim(),
-        gender,
-        age: Number(age),
-        birth_date: birthDate,
-        status,
-        location_category: locationCategory,
-        location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
-        last_known_state: lastKnownState || null,
-        last_known_city: lastKnownCity.trim() || null,
-        last_known_parish: lastKnownParish.trim() || null,
+        full_name: data.fullName.trim(),
+        cedula: data.cedula.trim(),
+        gender: data.gender,
+        age: ageValue,
+        birth_date: birthDateValue,
+        status: data.status,
+        location_category: data.locationCategory,
+        location_detail:
+          data.locationCategory === "Otro..." ? data.locationDetail.trim() : data.locationDetail.trim() || null,
+        last_known_state: data.lastKnownState || null,
+        last_known_city: data.lastKnownCity.trim() || null,
+        last_known_parish: data.lastKnownParish.trim() || null,
         image_url: imageUrl,
-        is_minor: isMinor,
-        accepted_terms: acceptedTerms,
+        is_minor: minor,
+        accepted_terms: data.acceptedTerms,
         terms_version: "2026-06-27"
       });
 
       if (error) throw error;
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
-      setFullName("");
-      setCedula("");
-      setGender("");
-      setAge("");
-      setBirthDate("");
-      setStatus("missing");
-      setLocationCategory(locationOptions[0]);
-      setLocationDetail("");
-      setLastKnownState("");
-      setLastKnownCity("");
-      setLastKnownParish("");
+      reset();
       setPhoto(null);
-      setAcceptedTerms(false);
       setStep(1);
     } catch {
       setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
-    } finally {
-      setIsSubmitting(false);
     }
   }
 
@@ -120,47 +184,131 @@ export default function ReportPage() {
           Completa solo lo que conozcas con seguridad. La foto sera reducida en este dispositivo antes de subirla.
         </p>
 
-        <form className="mt-6 grid gap-5" onSubmit={submitReport}>
+        <form className="mt-6 grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {step === 1 ? (
             <section className="grid gap-4">
-              <TextField label="Nombre completo" onChange={setFullName} required value={fullName} />
-              <TextField label="Cedula de Identidad" onChange={setCedula} required value={cedula} />
-              <label className="grid gap-2 font-bold">
-                Genero
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setGender(event.target.value)} required value={gender}>
+              <Field error={errors.fullName?.message} label="Nombre completo">
+                <input
+                  className={inputClass}
+                  {...register("fullName", {
+                    required: "Ingresa el nombre completo.",
+                    minLength: { value: 2, message: "El nombre debe tener al menos 2 caracteres." }
+                  })}
+                />
+              </Field>
+              <Field error={errors.cedula?.message} label="Cedula de Identidad">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  {...cedulaField}
+                  onChange={(event) => {
+                    event.target.value = sanitizeCedula(event.target.value);
+                    cedulaField.onChange(event);
+                  }}
+                />
+              </Field>
+              <Field error={errors.gender?.message} label="Genero">
+                <select className={inputClass} {...register("gender", { required: "Selecciona una opcion." })}>
                   <option value="">Seleccionar</option>
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
                   <option value="otro">Otro / no especificado</option>
                 </select>
-              </label>
-              <label className="grid gap-2 font-bold">
-                Estado de vida
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setStatus(event.target.value as LifeStatus)} value={status}>
+              </Field>
+              <Field label="Estado de vida">
+                <select className={inputClass} {...register("status")}>
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
                   ))}
                 </select>
-              </label>
+              </Field>
             </section>
           ) : null}
 
           {step === 2 ? (
             <section className="grid gap-4">
-              <TextField label="Edad" min="0" onChange={setAge} required type="number" value={age} />
-              <TextField label="Fecha de nacimiento" onChange={setBirthDate} required type="date" value={birthDate} />
-              {isMinor ? <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">El reporte sera marcado como menor de edad.</p> : null}
-              <label className="grid gap-2 font-bold">
-                Foto opcional
+              <fieldset className="grid gap-2">
+                <legend className="font-bold">Datos de edad</legend>
+                <p className="text-sm font-semibold text-neutral-600">Elige la opcion que mejor describa lo que conoces.</p>
+                <div className="grid gap-2">
+                  {(Object.keys(ageModeLabels) as AgeMode[]).map((mode) => (
+                    <label
+                      key={mode}
+                      className="flex items-center gap-3 rounded-md border border-neutral-300 bg-white p-3 font-semibold"
+                    >
+                      <input
+                        checked={ageMode === mode}
+                        className="h-5 w-5"
+                        onChange={() => selectAgeMode(mode)}
+                        type="checkbox"
+                      />
+                      <span>{ageModeLabels[mode]}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              {ageMode === "birthDate" ? (
+                <Field error={errors.birthDate?.message} label="Fecha de nacimiento">
+                  <input
+                    className={inputClass}
+                    type="date"
+                    {...register("birthDate", {
+                      validate: (value) =>
+                        ageMode !== "birthDate" || (!!value && calculateAge(value) != null) || "Indica una fecha de nacimiento valida."
+                    })}
+                  />
+                  {derivedAge != null ? (
+                    <span className="text-sm font-bold text-neutral-700">Edad calculada: {derivedAge} años</span>
+                  ) : null}
+                </Field>
+              ) : null}
+
+              {ageMode === "ageOnly" ? (
+                <Field error={errors.age?.message} label="Edad">
+                  <input
+                    className={inputClass}
+                    inputMode="numeric"
+                    min="0"
+                    max="125"
+                    type="number"
+                    {...register("age", {
+                      validate: (value) => {
+                        if (ageMode !== "ageOnly") return true;
+                        if (!value) return "Indica la edad.";
+                        const numeric = Number(value);
+                        if (!Number.isInteger(numeric) || numeric < 0 || numeric > 125) {
+                          return "Ingresa una edad entre 0 y 125.";
+                        }
+                        return true;
+                      }
+                    })}
+                  />
+                </Field>
+              ) : null}
+
+              {ageMode === "unknown" ? (
+                <p className="rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold text-neutral-700">
+                  Puedes continuar sin estos datos. El reporte no podra encontrarse por busqueda exacta hasta que se conozca la fecha de nacimiento.
+                </p>
+              ) : null}
+
+              {isMinor ? (
+                <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">
+                  El reporte sera marcado como menor de edad.
+                </p>
+              ) : null}
+
+              <Field label="Foto opcional">
                 <input
                   accept="image/*"
-                  className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
+                  className={inputClass}
                   onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
                   type="file"
                 />
-              </label>
+              </Field>
             </section>
           ) : null}
 
@@ -172,34 +320,27 @@ export default function ReportPage() {
                 </p>
               ) : null}
 
-              <label className="grid gap-2 font-bold">
-                Ubicacion o institucion
-                <select
-                  className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
-                  onChange={(event) => setLocationCategory(event.target.value)}
-                  required
-                  value={locationCategory}
-                >
+              <Field label="Ubicacion o institucion">
+                <select className={inputClass} {...register("locationCategory", { required: true })}>
                   {locationOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="grid gap-2 font-bold">
-                Detalle de ubicacion
+              </Field>
+              <Field error={errors.locationDetail?.message} label="Detalle de ubicacion">
                 <textarea
-                  className="focus-ring min-h-24 rounded-md border border-neutral-400 bg-white px-3 py-3"
-                  onChange={(event) => setLocationDetail(event.target.value)}
+                  className={`${inputClass} min-h-24`}
                   placeholder={locationCategory === "Otro..." ? "Escribe el lugar conocido" : "Nombre del centro, ciudad o referencia"}
-                  required={locationCategory === "Otro..."}
-                  value={locationDetail}
+                  {...register("locationDetail", {
+                    validate: (value) =>
+                      locationCategory !== "Otro..." || value.trim().length > 0 || "Describe la ubicacion."
+                  })}
                 />
-              </label>
-              <label className="grid gap-2 font-bold">
-                Estado donde fue extraviada o ultimo lugar conocido
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setLastKnownState(event.target.value)} value={lastKnownState}>
+              </Field>
+              <Field label="Estado donde fue extraviada o ultimo lugar conocido">
+                <select className={inputClass} {...register("lastKnownState")}>
                   <option value="">No especificado</option>
                   {stateOptions.map((state) => (
                     <option key={state} value={state}>
@@ -207,17 +348,15 @@ export default function ReportPage() {
                     </option>
                   ))}
                 </select>
-              </label>
-              <TextField label="Ciudad opcional" onChange={setLastKnownCity} value={lastKnownCity} />
-              <TextField label="Parroquia opcional" onChange={setLastKnownParish} value={lastKnownParish} />
+              </Field>
+              <Field label="Ciudad opcional">
+                <input className={inputClass} {...register("lastKnownCity")} />
+              </Field>
+              <Field label="Parroquia opcional">
+                <input className={inputClass} {...register("lastKnownParish")} />
+              </Field>
               <label className="flex gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6">
-                <input
-                  checked={acceptedTerms}
-                  className="mt-1 h-5 w-5"
-                  onChange={(event) => setAcceptedTerms(event.target.checked)}
-                  required
-                  type="checkbox"
-                />
+                <input className="mt-1 h-5 w-5" type="checkbox" {...register("acceptedTerms", { required: true })} />
                 <span>
                   Confirmo que envio esta informacion de buena fe para fines humanitarios y acepto los{" "}
                   <Link className="font-black text-signal underline" href="/legal" target="_blank">
@@ -236,11 +375,11 @@ export default function ReportPage() {
               </button>
             ) : null}
             {step < 3 ? (
-              <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" disabled={!canContinue} onClick={() => setStep((step + 1) as Step)} type="button">
+              <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" onClick={goNext} type="button">
                 Continuar
               </button>
             ) : (
-              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !acceptedTerms} type="submit">
+              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !watch("acceptedTerms")} type="submit">
                 {isSubmitting ? "Enviando..." : "Enviar Reporte"}
               </button>
             )}
@@ -253,32 +392,12 @@ export default function ReportPage() {
   );
 }
 
-function TextField({
-  label,
-  onChange,
-  value,
-  type = "text",
-  required = false,
-  min
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-  type?: string;
-  required?: boolean;
-  min?: string;
-}) {
+function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
   return (
     <label className="grid gap-2 font-bold">
       {label}
-      <input
-        className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
-        min={min}
-        onChange={(event) => onChange(event.target.value)}
-        required={required}
-        type={type}
-        value={value}
-      />
+      {children}
+      {error ? <span className="text-sm font-semibold text-alert">{error}</span> : null}
     </label>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 import { SearchResult, supabase } from "@/lib/supabaseClient";
 
 const statusLabels: Record<string, string> = {
@@ -11,28 +13,39 @@ const statusLabels: Record<string, string> = {
   critical_health: "Salud delicada"
 };
 
+type SearchForm = {
+  cedula: string;
+  birthDate: string;
+};
+
 export default function SearchPage() {
-  const [cedula, setCedula] = useState("");
-  const [birthDate, setBirthDate] = useState("");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [message, setMessage] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting }
+  } = useForm<SearchForm>({
+    mode: "onChange",
+    defaultValues: { cedula: "", birthDate: "" }
+  });
+
+  const cedulaField = register("cedula", cedulaRules);
+
+  async function search(data: SearchForm) {
     setResult(null);
     setMessage("");
-    setIsSearching(true);
 
     try {
-      const { data, error } = await supabase.rpc("search_missing_person", {
-        search_cedula: cedula.trim(),
-        search_birth_date: birthDate
+      const { data: rows, error } = await supabase.rpc("search_missing_person", {
+        search_cedula: data.cedula.trim(),
+        search_birth_date: data.birthDate
       });
 
       if (error) throw error;
 
-      const match = Array.isArray(data) ? (data[0] as SearchResult | undefined) : null;
+      const match = Array.isArray(rows) ? (rows[0] as SearchResult | undefined) : null;
       if (!match) {
         setMessage("No encontramos una coincidencia exacta. Verifica los datos e intenta nuevamente.");
         return;
@@ -41,8 +54,6 @@ export default function SearchPage() {
       setResult(match);
     } catch {
       setMessage("La busqueda no pudo completarse. Intenta de nuevo cuando tengas conexion.");
-    } finally {
-      setIsSearching(false);
     }
   }
 
@@ -58,23 +69,31 @@ export default function SearchPage() {
         <h1 className="text-3xl font-black">Buscar un Familiar</h1>
         <p className="mt-2 leading-7 text-neutral-700">Por seguridad, solo se muestran resultados con cedula y fecha de nacimiento exactas.</p>
 
-        <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={search}>
+        <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={handleSubmit(search)}>
           <label className="grid gap-2 font-bold">
             Cedula de Identidad
-            <input className="focus-ring rounded-md border border-neutral-400 px-3 py-3" onChange={(event) => setCedula(event.target.value)} required value={cedula} />
+            <input
+              className="focus-ring rounded-md border border-neutral-400 px-3 py-3"
+              inputMode="numeric"
+              {...cedulaField}
+              onChange={(event) => {
+                event.target.value = sanitizeCedula(event.target.value);
+                cedulaField.onChange(event);
+              }}
+            />
+            {errors.cedula?.message ? <span className="text-sm font-semibold text-alert">{errors.cedula.message}</span> : null}
           </label>
           <label className="grid gap-2 font-bold">
             Fecha de nacimiento
             <input
               className="focus-ring rounded-md border border-neutral-400 px-3 py-3"
-              onChange={(event) => setBirthDate(event.target.value)}
-              required
               type="date"
-              value={birthDate}
+              {...register("birthDate", { required: "Indica la fecha de nacimiento." })}
             />
+            {errors.birthDate?.message ? <span className="text-sm font-semibold text-alert">{errors.birthDate.message}</span> : null}
           </label>
-          <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white" disabled={isSearching} type="submit">
-            {isSearching ? "Buscando..." : "Buscar"}
+          <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting} type="submit">
+            {isSubmitting ? "Buscando..." : "Buscar"}
           </button>
         </form>
 

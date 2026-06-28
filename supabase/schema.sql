@@ -15,8 +15,8 @@ create table if not exists public.missing_persons (
   full_name text not null check (char_length(trim(full_name)) between 2 and 180),
   cedula text not null check (char_length(trim(cedula)) between 4 and 30),
   gender text not null check (gender in ('femenino', 'masculino', 'otro')),
-  age integer not null check (age between 0 and 125),
-  birth_date date not null,
+  age integer check (age between 0 and 125),
+  birth_date date,
   status public.person_status not null default 'missing',
   location_category text not null check (location_category in ('Hospital', 'Sede Policial', 'Refugio Temporal', 'Escuela Habilitada', 'Otro...')),
   location_detail text,
@@ -30,7 +30,11 @@ create table if not exists public.missing_persons (
   last_seen_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint missing_persons_minor_consistency check (is_minor = (age < 18)),
+  -- age/birth_date may be unknown during emergencies: when age is known it must
+  -- still match is_minor; when unknown, is_minor is set false (cannot assert minority).
+  constraint missing_persons_minor_consistency check (age is null or is_minor = (age < 18)),
+  -- birth_date may be null (age-only reports). NULLs are distinct in Postgres, so
+  -- this only enforces a single record per (cedula, birth_date) when birth_date is known.
   constraint missing_persons_exact_identity unique (cedula, birth_date)
 );
 
@@ -39,6 +43,12 @@ alter table public.missing_persons add column if not exists last_known_city text
 alter table public.missing_persons add column if not exists last_known_parish text;
 alter table public.missing_persons add column if not exists accepted_terms boolean not null default false;
 alter table public.missing_persons add column if not exists terms_version text;
+
+-- Relax age/birth_date for existing deployments: emergencies may only yield one of them.
+alter table public.missing_persons alter column age drop not null;
+alter table public.missing_persons alter column birth_date drop not null;
+alter table public.missing_persons drop constraint if exists missing_persons_minor_consistency;
+alter table public.missing_persons add constraint missing_persons_minor_consistency check (age is null or is_minor = (age < 18));
 
 create index if not exists missing_persons_cedula_idx on public.missing_persons (cedula);
 create index if not exists missing_persons_birth_date_idx on public.missing_persons (birth_date);
@@ -72,7 +82,7 @@ on public.missing_persons
 for insert
 to anon
 with check (
-  is_minor = (age < 18)
+  (age is null or is_minor = (age < 18))
   and accepted_terms = true
   and terms_version is not null
   and char_length(trim(cedula)) between 4 and 30
