@@ -28,6 +28,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Supabase PostgreSQL + Storage
 - Vercel deployment from GitHub
 - GitHub Actions for PR/version validation
+- Two Supabase environments: production in the owner account, preview in a trusted collaborator account.
 
 ## Important Routes
 
@@ -72,9 +73,10 @@ Anonymous direct reads are intentionally denied by RLS.
 1. Read `docs/privacy-and-data-protection.md` before touching data flows.
 2. Read `supabase/schema.sql` before changing database behavior.
 3. Read `supabase/audit.sql` before changing audit behavior.
-4. Check `.github/workflows/validate-tag.yml` before changing release/tag behavior.
-5. Run `npm run lint` and `npm run build`.
-6. If adding a field, update:
+4. Read `docs/environments.md` before changing deployment, branch, or environment behavior.
+5. Check `.github/workflows/validate-tag.yml` before changing release/tag behavior.
+6. Run `npm run lint` and `npm run build`.
+7. If adding a field, update:
    - Supabase schema
    - report form
    - search result masking
@@ -102,6 +104,8 @@ Do not store raw cedula or birth date in audit metadata. Use salted hashes via `
 `.github/CODEOWNERS` currently names `@leoenarg` and `@ParkerPiter` as code owners.
 
 `.github/workflows/validate-tag.yml` runs on pull requests to `main` and expects a `VERSION` file to match the next tag in `v.Numero.YYMMDDletra` format. If the workflow stays enabled, keep `VERSION` synchronized with the expected tag; otherwise PR validation will fail.
+
+Deployment is controlled by GitHub Actions. Pull requests validate only; pushes to `preview` deploy Vercel Preview after checks; pushes to `main` deploy Vercel Production after checks and VERSION validation. Vercel automatic Git deployments should be disabled or ignored so they cannot deploy before CI passes.
 
 ## Forbidden Changes Without Human Review
 
