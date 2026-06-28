@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
+import { fullNamePattern } from "@/lib/formHelpers";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
 type ReportRequestBody = {
@@ -50,6 +51,8 @@ function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
   }
   if (typeof body.full_name !== "string" || body.full_name.trim().length === 0) {
     errors.push("full_name es obligatoria.");
+  } else if (!fullNamePattern.test(body.full_name.trim())) {
+    errors.push("full_name solo puede contener letras, espacios, tildes, apostrofe, punto o guion.");
   }
   if (typeof body.birth_date !== "string" || body.birth_date.trim().length === 0) {
     errors.push("birth_date es obligatoria.");

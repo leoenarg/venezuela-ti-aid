@@ -7,7 +7,7 @@ import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
-import { calculateAge, cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
+import { calculateAge, cedulaRules, fullNameRules, sanitizeCedula } from "@/lib/formHelpers";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
 
@@ -281,15 +281,14 @@ export default function ReportPage() {
             <section className="grid gap-4">
               <TextField
                 label="Nombre completo"
-                registration={register("fullName", {
-                  required: "El nombre completo es obligatorio.",
-                  minLength: { value: 2, message: "Ingresa el nombre completo." }
-                })}
+                hint="Escribe nombre y apellido como aparecen en documentos o como la familia los reconoce. Se aceptan tildes, ñ, dieresis, apostrofe, punto y guion."
+                registration={register("fullName", fullNameRules)}
                 error={errors.fullName?.message}
                 required
               />
               <TextField
                 label="Cedula de Identidad"
+                hint="Solo numeros, sin puntos ni guiones."
                 inputMode="numeric"
                 registration={{
                   ...cedulaField,
@@ -312,6 +311,7 @@ export default function ReportPage() {
                   <option value="masculino">Masculino</option>
                   <option value="otro">Otro / no especificado</option>
                 </select>
+                <span className="text-sm font-normal text-neutral-600">Usa la opcion que ayude a identificar a la persona con respeto y sin exponer informacion innecesaria.</span>
                 {errors.gender ? <span className="text-sm font-semibold text-alert">{errors.gender.message}</span> : null}
               </label>
               <label className="grid gap-2 font-bold">
@@ -323,6 +323,7 @@ export default function ReportPage() {
                     </option>
                   ))}
                 </select>
+                <span className="text-sm font-normal text-neutral-600">Selecciona la situacion mas reciente conocida: extraviada, encontrada, fallecida o bajo supervision medica.</span>
               </label>
             </section>
           ) : null}
@@ -331,6 +332,7 @@ export default function ReportPage() {
             <section className="grid gap-4">
               <TextField
                 label="Fecha de nacimiento"
+                hint="Formato de fecha del selector: dia, mes y ano. Es necesaria para la busqueda exacta."
                 type="date"
                 registration={birthDateField}
                 error={errors.birthDate?.message}
@@ -341,7 +343,7 @@ export default function ReportPage() {
                 min="0"
                 type="number"
                 readOnly
-                hint="Se calcula automaticamente a partir de la fecha de nacimiento."
+                hint="Se calcula automaticamente a partir de la fecha de nacimiento y define si aplica proteccion de menor de edad."
                 registration={register("age", {
                   required: "La edad es obligatoria.",
                   min: { value: 0, message: "La edad no puede ser negativa." }
@@ -358,6 +360,7 @@ export default function ReportPage() {
                   onChange={handlePhotoChange}
                   type="file"
                 />
+                <span className="text-sm font-normal text-neutral-600">Debe mostrar claramente el rostro. Se valida y optimiza en tu dispositivo antes de subir.</span>
               </label>
               <PhotoValidationPanel result={photoValidation} status={photoStatus} />
             </section>
@@ -383,6 +386,7 @@ export default function ReportPage() {
                     </option>
                   ))}
                 </select>
+                <span className="text-sm font-normal text-neutral-600">Indica el tipo de lugar donde fue reportada, vista o atendida por ultima vez.</span>
               </label>
               <label className="grid gap-2 font-bold">
                 Detalle de ubicacion
@@ -394,6 +398,7 @@ export default function ReportPage() {
                       locationCategory !== "Otro..." || value.trim().length > 0 || "Describe el lugar conocido."
                   })}
                 />
+                <span className="text-sm font-normal text-neutral-600">Agrega nombre del centro, referencia, direccion aproximada o cualquier detalle verificable.</span>
                 {errors.locationDetail ? (
                   <span className="text-sm font-semibold text-alert">{errors.locationDetail.message}</span>
                 ) : null}
@@ -408,9 +413,10 @@ export default function ReportPage() {
                     </option>
                   ))}
                 </select>
+                <span className="text-sm font-normal text-neutral-600">Selecciona el estado venezolano asociado al ultimo dato confiable.</span>
               </label>
-              <TextField label="Ciudad opcional" registration={register("lastKnownCity")} />
-              <TextField label="Parroquia opcional" registration={register("lastKnownParish")} />
+              <TextField label="Ciudad opcional" hint="Ciudad, municipio o poblacion del ultimo lugar conocido." registration={register("lastKnownCity")} />
+              <TextField label="Parroquia opcional" hint="Parroquia o sector si se conoce; dejalo vacio si no estas seguro." registration={register("lastKnownParish")} />
               <label className="flex gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6">
                 <input
                   className="mt-1 h-5 w-5"
@@ -423,6 +429,9 @@ export default function ReportPage() {
                     terminos, privacidad y colaboracion
                   </Link>
                   .
+                  <span className="mt-1 block text-xs font-normal text-neutral-600">
+                    Debes tener autorizacion o una razon humanitaria legitima para compartir estos datos.
+                  </span>
                 </span>
               </label>
             </section>

@@ -14,10 +14,10 @@ const fallbackStats: PublicStats = {
 };
 
 const statLabels = [
-  ["Personas perdidas", "total_missing"],
+  ["Personas extraviadas", "total_missing"],
   ["Encontradas con vida", "found_alive"],
   ["Fallecidas", "deceased"],
-  ["Salud delicada", "critical_health"]
+  ["Bajo supervision medica", "critical_health"]
 ] as const;
 
 export default function HomePage() {

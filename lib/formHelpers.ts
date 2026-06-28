@@ -30,6 +30,20 @@ export function calculateAge(birthDate: string): string {
   return String(age);
 }
 
+export const fullNamePattern = /^\p{L}[\p{L}\p{M}]*(?:[ '\u2019.-]\p{L}[\p{L}\p{M}]*)+$/u;
+
+export const fullNameRules = {
+  required: "El nombre completo es obligatorio.",
+  minLength: {
+    value: 2,
+    message: "Ingresa el nombre completo."
+  },
+  pattern: {
+    value: fullNamePattern,
+    message: "Usa solo nombres y apellidos con letras, espacios, tildes, ñ, dieresis, apostrofe, punto o guion."
+  }
+} satisfies RegisterOptions;
+
 /**
  * react-hook-form validation rules for the cedula field.
  * Numeric only, required, with a humane Spanish message.
