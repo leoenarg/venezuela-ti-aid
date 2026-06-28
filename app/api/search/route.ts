@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { SearchResult } from "@/lib/supabaseClient";
 import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
-import { hasSupabaseServiceConfig, supabaseAdmin } from "@/lib/supabaseServer";
+import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
 type SearchRequestBody = {
   cedula?: string;
@@ -11,13 +11,13 @@ type SearchRequestBody = {
 export async function POST(request: Request) {
   const requestId = createAuditRequestId();
 
-  if (!hasSupabaseServiceConfig) {
+  if (!hasSupabaseConfig) {
     await logAuditEventSafely({
       eventType: "SEARCH_PERSON",
       request,
       requestId,
       statusCode: 503,
-      metadata: { error: "missing_supabase_service_config" }
+      metadata: { error: "missing_supabase_public_config" }
     });
 
     return NextResponse.json({ error: "El servicio de busqueda no esta configurado." }, { status: 503 });
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Faltan datos para buscar." }, { status: 400 });
     }
 
-    const { data, error } = await supabaseAdmin.rpc("search_missing_person", {
+    const { data, error } = await supabase.rpc("search_missing_person", {
       search_cedula: cedula,
       search_birth_date: birthDate
     });
