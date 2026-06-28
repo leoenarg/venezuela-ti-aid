@@ -1,15 +1,53 @@
-name: Validar Formato de Versión y Tag
+name: Validar y desplegar
 
 on:
   pull_request:
     branches:
+      - preview
+      - main
+  push:
+    branches:
+      - preview
       - main
 
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate-version:
+  checks:
+    name: Lint y build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del código
+      - name: Checkout del codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  validate-version:
+    name: Validar VERSION
+    runs-on: ubuntu-latest
+    needs: checks
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    steps:
+      - name: Checkout del codigo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -20,7 +58,7 @@ jobs:
           set -euo pipefail
 
           if [ ! -f VERSION ]; then
-            echo "ERROR: Falta el archivo VERSION en la raíz del repositorio."
+            echo "ERROR: Falta el archivo VERSION en la raiz del repositorio."
             exit 1
           fi
 
@@ -35,8 +73,8 @@ jobs:
           HOY=$(date +'%y%m%d')
           echo "Fecha de hoy calculada: $HOY"
 
-          ULTIMO_TAG=$(git tag --list 'v.*' | sort | tail -n 1 || true)
-          echo "Último tag encontrado en el repo: ${ULTIMO_TAG:-ninguno}"
+          ULTIMO_TAG=$(git tag --list 'v.*' | sort -V | tail -n 1 || true)
+          echo "Ultimo tag encontrado en el repo: ${ULTIMO_TAG:-ninguno}"
 
           if [ -n "$ULTIMO_TAG" ]; then
             VERSION_PURA=${ULTIMO_TAG#v.}
@@ -46,12 +84,7 @@ jobs:
             LETRA_TAG=${FECHA_Y_LETRA:6:1}
 
             if [ "$HOY" = "$FECHA_TAG" ]; then
-              SIGUIENTE_LETRA=$(python - <<'PY'
-import sys
-letra = sys.argv[1]
-print(chr(ord(letra) + 1))
-PY
-"$LETRA_TAG")
+              SIGUIENTE_LETRA=$(python -c "import sys; print(chr(ord(sys.argv[1]) + 1))" "$LETRA_TAG")
               TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}${SIGUIENTE_LETRA}"
             else
               TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}a"
@@ -63,8 +96,100 @@ PY
           echo "El Pull Request debe usar el siguiente tag esperado: $TAG_ESPERADO"
 
           if [ "$VERSION_EN_CODIGO" != "$TAG_ESPERADO" ]; then
-            echo "ERROR: El contenido de VERSION ($VERSION_EN_CODIGO) no coincide con el tag esperado ($TAG_ESPERADO)."
+            echo "ERROR: VERSION ($VERSION_EN_CODIGO) no coincide con el tag esperado ($TAG_ESPERADO)."
             exit 1
           fi
 
-          echo "Validación exitosa. La versión es correcta y consecutiva."
+          echo "Validacion exitosa. La version es correcta y consecutiva."
+
+  deploy-preview:
+    name: Desplegar preview
+    runs-on: ubuntu-latest
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/preview'
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Descargar configuracion Preview de Vercel
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Compilar artefacto Preview
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Desplegar artefacto Preview
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  deploy-production:
+    name: Desplegar produccion
+    runs-on: ubuntu-latest
+    needs:
+      - checks
+      - validate-version
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Descargar configuracion Production de Vercel
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Compilar artefacto Production
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Desplegar artefacto Production
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
