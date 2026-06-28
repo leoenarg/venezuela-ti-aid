@@ -101,7 +101,7 @@ Do not store raw cedula or birth date in audit metadata. Use salted hashes via `
 
 `.github/CODEOWNERS` currently names `@leoenarg` and `@ParkerPiter` as code owners.
 
-`.github/workflows/validate-tag.yml` runs on pull requests to `main` and expects a `VERSION` file to match the next tag in `v.DDMMYYletra` format. If the workflow stays enabled, keep `VERSION` synchronized with the expected tag; otherwise PR validation will fail.
+`.github/workflows/validate-tag.yml` runs on pull requests to `main` and expects a `VERSION` file to match the next tag in `v.Numero.YYMMDDletra` format. If the workflow stays enabled, keep `VERSION` synchronized with the expected tag; otherwise PR validation will fail.
 
 ## Forbidden Changes Without Human Review
 

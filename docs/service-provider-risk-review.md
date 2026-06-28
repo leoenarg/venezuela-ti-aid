@@ -53,7 +53,7 @@ Implementation notes:
 - Keep legal docs and schema changes reviewed.
 - Keep CODEOWNERS current when project maintainers change.
 - GitHub Actions workflows must not print environment secrets, production data, Supabase exports, audit exports, or submitted user records.
-- Version/tag automation currently expects `VERSION` to match the next `v.DDMMYYletra` tag before merging to `main`.
+- Version/tag automation currently expects `VERSION` to match the next `v.Numero.YYMMDDletra` tag before merging to `main`.
 
 ## Future Providers
 

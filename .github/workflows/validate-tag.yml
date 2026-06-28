@@ -12,45 +12,59 @@ jobs:
       - name: Checkout del código
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Trae todo el historial para poder ver los tags
+          fetch-depth: 0
 
-      - name: Obtener fecha actual y último tag
-        id: version_logic
+      - name: Validar VERSION contra el siguiente tag esperado
+        shell: bash
         run: |
-          # 1. Formatear la fecha de hoy como DDMMYY (ej: 280626 para 28 de Junio 2026)
-          # Nota: Usamos el formato que pediste (Día, Mes, Año a dos dígitos)
-          HOY=$(date +'%d%m%y')
-          echo "Fecha de hoy calculada: $HOY"
+          set -euo pipefail
 
-          # 2. Buscar el último tag que cumpla con el patrón v.*
-          ULTIMO_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v.000000a")
-          echo "Último tag encontrado en el repo: $ULTIMO_TAG"
-
-          # 3. Extraer los componentes del último tag (asumiendo formato v.DDMMYYletra)
-          # Quitamos el "v." inicial
-          VERSION_PURA=${ULTIMO_TAG#v.}
-          FECHA_TAG=${VERSION_PURA:0:6}
-          LETRA_TAG=${VERSION_PURA:6:1}
-
-          # 4. Lógica para determinar el siguiente tag esperado
-          if [ "$HOY" == "$FECHA_TAG" ]; then
-            # Si el último tag es de hoy, incrementamos la letra (de 'a' a 'b', 'b' a 'c', etc.)
-            SIGUIENTE_LETRA=$(echo "$LETRA_TAG" | tr "0-9a-z" "1-9a-za")
-            TAG_ESPERADO="v.${HOY}${SIGUIENTE_LETRA}"
-          else
-            # Si el último tag es de otro día anterior (o no hay), arranca en 'a' con la fecha de hoy
-            TAG_ESPERADO="v.${HOY}a"
-          fi
-          
-          echo "El Pull Request DEBE compilar o apuntar a la versión: $TAG_ESPERADO"
-          
-          # 5. AQUÍ VALIDÁS CONTRA TU CÓDIGO
-          # Por ejemplo, si guardás la versión en un archivo de texto llamado VERSION:
-          VERSION_EN_CODIGO=$(cat VERSION) 
-          
-          if [ "$VERSION_EN_CODIGO" != "$TAG_ESPERADO" ]; then
-            echo "ERROR: La versión en el archivo VERSION ($VERSION_EN_CODIGO) no coincide con la esperada ($TAG_ESPERADO)."
+          if [ ! -f VERSION ]; then
+            echo "ERROR: Falta el archivo VERSION en la raíz del repositorio."
             exit 1
           fi
-          
+
+          VERSION_EN_CODIGO=$(tr -d '\r\n' < VERSION)
+          echo "Contenido de VERSION: $VERSION_EN_CODIGO"
+
+          if [[ ! "$VERSION_EN_CODIGO" =~ ^v\.[0-9]+\.[0-9]{6}[a-z]$ ]]; then
+            echo "ERROR: VERSION debe usar el formato v.Numero.YYMMDDletra (por ejemplo v.0.260628a)."
+            exit 1
+          fi
+
+          HOY=$(date +'%y%m%d')
+          echo "Fecha de hoy calculada: $HOY"
+
+          ULTIMO_TAG=$(git tag --list 'v.*' | sort | tail -n 1 || true)
+          echo "Último tag encontrado en el repo: ${ULTIMO_TAG:-ninguno}"
+
+          if [ -n "$ULTIMO_TAG" ]; then
+            VERSION_PURA=${ULTIMO_TAG#v.}
+            NUMERO_TAG=${VERSION_PURA%%.*}
+            FECHA_Y_LETRA=${VERSION_PURA#*.}
+            FECHA_TAG=${FECHA_Y_LETRA:0:6}
+            LETRA_TAG=${FECHA_Y_LETRA:6:1}
+
+            if [ "$HOY" = "$FECHA_TAG" ]; then
+              SIGUIENTE_LETRA=$(python - <<'PY'
+import sys
+letra = sys.argv[1]
+print(chr(ord(letra) + 1))
+PY
+"$LETRA_TAG")
+              TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}${SIGUIENTE_LETRA}"
+            else
+              TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}a"
+            fi
+          else
+            TAG_ESPERADO="v.0.${HOY}a"
+          fi
+
+          echo "El Pull Request debe usar el siguiente tag esperado: $TAG_ESPERADO"
+
+          if [ "$VERSION_EN_CODIGO" != "$TAG_ESPERADO" ]; then
+            echo "ERROR: El contenido de VERSION ($VERSION_EN_CODIGO) no coincide con el tag esperado ($TAG_ESPERADO)."
+            exit 1
+          fi
+
           echo "Validación exitosa. La versión es correcta y consecutiva."

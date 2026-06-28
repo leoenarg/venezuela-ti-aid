@@ -76,18 +76,18 @@ La auditoria guarda IP aproximada y `ip_hash`, headers tecnicos minimos, ruta, m
 - `docs/collaboration-policy.md` define reglas para colaboradores y uso de IA.
 - `docs/service-provider-risk-review.md` resume riesgos y links de Vercel, Supabase y GitHub.
 - `.github/CODEOWNERS` define revisores responsables para cambios del repositorio.
-- `.github/workflows/validate-tag.yml` valida en pull requests hacia `main` que la version esperada sea consecutiva segun el ultimo tag `v.DDMMYYletra`.
+- `.github/workflows/validate-tag.yml` valida en pull requests hacia `main` que la version esperada sea consecutiva segun el ultimo tag `v.Numero.YYMMDDletra`.
 
 ## Versionado y tags
 
 El flujo de GitHub espera tags con formato:
 
 ```text
-v.DDMMYYa
-v.DDMMYYb
+v.0.260628a
+v.0.260628b
 ```
 
-Ejemplo: `v.280626a` para el primer tag del 28 de junio de 2026. Si existe otro tag el mismo dia, la letra debe avanzar.
+Ejemplo: `v.0.260628a` para el primer tag del 28 de junio de 2026. Si existe otro tag el mismo dia, la letra debe avanzar.
 
 El workflow `validate-tag.yml` lee un archivo `VERSION` y lo compara contra el siguiente tag esperado. Si se mantiene este control, cada PR hacia `main` debe incluir o actualizar `VERSION` con el valor esperado antes de mergear.
 
