@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
-import { hasSupabaseServiceConfig, supabaseAdmin } from "@/lib/supabaseServer";
+import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
 type ReportRequestBody = {
   full_name?: string;
@@ -24,13 +24,13 @@ type ReportRequestBody = {
 export async function POST(request: Request) {
   const requestId = createAuditRequestId();
 
-  if (!hasSupabaseServiceConfig) {
+  if (!hasSupabaseConfig) {
     await logAuditEventSafely({
       eventType: "CREATE_PERSON_REPORT",
       request,
       requestId,
       statusCode: 503,
-      metadata: { error: "missing_supabase_service_config" }
+      metadata: { error: "missing_supabase_public_config" }
     });
 
     return NextResponse.json({ error: "El servicio no esta configurado para recibir reportes." }, { status: 503 });
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Faltan datos obligatorios para crear el reporte." }, { status: 400 });
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from("missing_persons")
       .insert({
         full_name: body.full_name.trim(),

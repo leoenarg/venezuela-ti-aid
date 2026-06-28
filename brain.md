@@ -89,7 +89,7 @@ Supabase Storage bucket `person-photos` must accept optimized `image/jpeg` and `
 
 ## Audit Notes
 
-Audit is defensive, append-only, and server-side. Required server-only environment variables are `SUPABASE_SERVICE_ROLE_KEY` and `AUDIT_SALT`. Never expose them through `NEXT_PUBLIC_*`.
+Audit is defensive, append-only, and server-side. Required server-only environment variables are `SUPABASE_SERVICE_ROLE_KEY` and `AUDIT_SALT`. Never expose them through `NEXT_PUBLIC_*`. Public report/search flows must not depend on service role; they should use anon/RLS and let audit logging fail safely if service credentials are unavailable.
 
 Integrated events: `UPLOAD_IMAGE_ATTEMPT`, `UPLOAD_IMAGE_SUCCESS`, `UPLOAD_IMAGE_REJECTED`, `CREATE_PERSON_REPORT`, `SEARCH_PERSON`, and `VIEW_PERSON_DETAIL`.
 
