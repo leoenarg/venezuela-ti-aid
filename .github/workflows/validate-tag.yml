@@ -1,4 +1,4 @@
-name: Validar y desplegar
+name: Validar Formato de Versión y Tag
 
 on:
   pull_request:
