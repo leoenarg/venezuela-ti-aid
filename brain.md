@@ -32,7 +32,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 
 ## Important Routes
 
-- `/` public dashboard, counters, Venezuela risk infographic.
+- `/` public dashboard, counters, Venezuela risk infographic, and free veterinary care directory.
 - `/report` multi-step report form.
 - `/search` exact-match private search.
 - `/legal` public terms, privacy, collaboration, and provider notice.
@@ -67,6 +67,10 @@ The public app uses RPC functions:
 - `search_missing_person`
 
 Anonymous direct reads are intentionally denied by RLS.
+
+## Static Reference Content Notes
+
+The home page shows a free veterinary care directory via `components/VetClinicsDirectory.tsx`. This is static, hardcoded, public emergency-aid reference data (clinic names, public phone numbers, locations). It is NOT a directory of individuals or missing persons, has no database, RPC, audit, or tracking, and therefore does not conflict with the "no public directories" privacy principle, which protects personal records of reported people. Keep this content static and free-tier friendly; do not turn it into a database-backed, user-submitted, or scraped listing without a privacy review.
 
 ## Safe Development Workflow
 
