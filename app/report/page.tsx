@@ -83,7 +83,10 @@ export default function ReportPage() {
     }
   };
 
-  const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
+  const isMinor = useMemo(() => {
+    const numericAge = Number(age);
+    return age !== "" && Number.isFinite(numericAge) && numericAge < 18;
+  }, [age]);
   const isPhotoBusy = photoStatus === "validating";
   const hasPhotoError = photoStatus === "error";
 

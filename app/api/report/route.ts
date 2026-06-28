@@ -21,13 +21,22 @@ type ReportRequestBody = {
   audit_metadata?: Record<string, unknown>;
 };
 
+const GENDER_OPTIONS = ["femenino", "masculino", "otro"] as const;
+const STATUS_OPTIONS = ["missing", "found_alive", "deceased", "critical_health"] as const;
+const LOCATION_OPTIONS = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."] as const;
+
 type ValidReportPayload = {
   full_name: string;
   cedula: string;
+  gender: (typeof GENDER_OPTIONS)[number];
   age: number;
   birth_date: string;
+  status: (typeof STATUS_OPTIONS)[number];
+  location_category: (typeof LOCATION_OPTIONS)[number];
+  is_minor: boolean;
   accepted_terms: true;
-} & Partial<Omit<ReportRequestBody, "full_name" | "cedula" | "age" | "birth_date" | "accepted_terms">>;
+  terms_version: string;
+} & Partial<Omit<ReportRequestBody, "full_name" | "cedula" | "gender" | "age" | "birth_date" | "status" | "location_category" | "is_minor" | "accepted_terms" | "terms_version">>;
 
 function isValidReportPayload(body: ReportRequestBody): body is ValidReportPayload {
   return (
@@ -35,7 +44,12 @@ function isValidReportPayload(body: ReportRequestBody): body is ValidReportPaylo
     typeof body.cedula === "string" && body.cedula.trim().length > 0 &&
     typeof body.full_name === "string" && body.full_name.trim().length > 0 &&
     typeof body.birth_date === "string" && body.birth_date.trim().length > 0 &&
-    typeof body.age === "number" && Number.isFinite(body.age)
+    typeof body.age === "number" && Number.isFinite(body.age) &&
+    typeof body.gender === "string" && GENDER_OPTIONS.includes(body.gender as any) &&
+    typeof body.status === "string" && STATUS_OPTIONS.includes(body.status as any) &&
+    typeof body.location_category === "string" && LOCATION_OPTIONS.includes(body.location_category as any) &&
+    typeof body.is_minor === "boolean" &&
+    typeof body.terms_version === "string" && body.terms_version.trim().length > 0
   );
 }
 
