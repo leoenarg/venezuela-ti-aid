@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
-import { SearchResult, supabase } from "@/lib/supabaseClient";
+import { SearchResult } from "@/lib/supabaseClient";
 
 const statusLabels: Record<string, string> = {
   missing: "Persona perdida",
@@ -38,14 +38,21 @@ export default function SearchPage() {
     setMessage("");
 
     try {
-      const { data: rows, error } = await supabase.rpc("search_missing_person", {
-        search_cedula: data.cedula.trim(),
-        search_birth_date: data.birthDate
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          cedula: data.cedula.trim(),
+          birthDate: data.birthDate
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Search API failed.");
 
-      const match = Array.isArray(rows) ? (rows[0] as SearchResult | undefined) : null;
+      const payload = (await response.json()) as { result: SearchResult | null };
+      const match = payload.result;
       if (!match) {
         setMessage("No encontramos una coincidencia exacta. Verifica los datos e intenta nuevamente.");
         return;
@@ -68,6 +75,10 @@ export default function SearchPage() {
 
         <h1 className="text-3xl font-black">Buscar un Familiar</h1>
         <p className="mt-2 leading-7 text-neutral-700">Por seguridad, solo se muestran resultados con cedula y fecha de nacimiento exactas.</p>
+        <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
+          Por seguridad y prevencion de abusos, esta consulta registra auditoria tecnica minima: fecha, IP aproximada,
+          navegador, accion realizada y si hubo coincidencia exacta.
+        </p>
 
         <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={handleSubmit(search)}>
           <label className="grid gap-2 font-bold">

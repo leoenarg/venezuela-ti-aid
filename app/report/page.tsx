@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useState } from "react";
+import Image from "next/image";
+import { ChangeEvent, ReactNode, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { calculateAge, cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
-import { compressToGrayscaleJpeg } from "@/lib/imageCompression";
+import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
 
@@ -43,7 +44,9 @@ const ageModeLabels: Record<AgeMode, string> = {
 
 export default function ReportPage() {
   const [step, setStep] = useState<Step>(1);
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [optimizedPhoto, setOptimizedPhoto] = useState<File | null>(null);
+  const [photoValidation, setPhotoValidation] = useState<ImageValidationResult | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<"idle" | "validating" | "error" | "success">("idle");
   const [message, setMessage] = useState("");
 
   const {
@@ -79,12 +82,24 @@ export default function ReportPage() {
   const ageInput = watch("age");
   const locationCategory = watch("locationCategory");
   const status = watch("status");
+  const acceptedTerms = watch("acceptedTerms");
+
+  const isPhotoBusy = photoStatus === "validating";
+  const hasPhotoError = photoStatus === "error";
 
   const derivedAge = ageMode === "birthDate" ? calculateAge(birthDate) : null;
   const effectiveAge = ageMode === "birthDate" ? derivedAge : ageMode === "ageOnly" ? Number(ageInput) : null;
   const isMinor = effectiveAge != null && effectiveAge >= 0 ? effectiveAge < 18 : false;
 
   const cedulaField = register("cedula", cedulaRules);
+
+  useEffect(() => {
+    return () => {
+      if (photoValidation?.previewUrl) {
+        URL.revokeObjectURL(photoValidation.previewUrl);
+      }
+    };
+  }, [photoValidation?.previewUrl]);
 
   function selectAgeMode(mode: AgeMode) {
     setValue("ageMode", mode);
@@ -100,7 +115,53 @@ export default function ReportPage() {
       2: ageMode === "birthDate" ? ["birthDate"] : ageMode === "ageOnly" ? ["age"] : []
     };
     const valid = await trigger(fieldsByStep[step] ?? []);
+    // Step 2 also waits for image validation to settle before advancing.
+    if (step === 2 && (isPhotoBusy || hasPhotoError)) return;
     if (valid) setStep((step + 1) as Step);
+  }
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0] ?? null;
+    setMessage("");
+    setOptimizedPhoto(null);
+
+    if (photoValidation?.previewUrl) {
+      URL.revokeObjectURL(photoValidation.previewUrl);
+    }
+
+    if (!selectedFile) {
+      setPhotoValidation(null);
+      setPhotoStatus("idle");
+      return;
+    }
+
+    setPhotoValidation(null);
+    setPhotoStatus("validating");
+    await logClientAuditEvent("UPLOAD_IMAGE_ATTEMPT", {
+      original_file_size: selectedFile.size,
+      mime_type: selectedFile.type
+    });
+
+    const result = await validateAndOptimizeImage(selectedFile);
+    setPhotoValidation(result);
+
+    if (!result.isValid || !result.optimizedFile) {
+      await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+        original_file_size: selectedFile.size,
+        mime_type: selectedFile.type,
+        validation_result: "rejected",
+        errors: result.errors,
+        warnings: result.warnings,
+        faces_detected: result.metadata.facesDetected,
+        nsfw_scores: result.metadata.nsfwScores
+      });
+      setOptimizedPhoto(null);
+      setPhotoStatus("error");
+      return;
+    }
+
+    setOptimizedPhoto(result.optimizedFile);
+    setPhotoStatus("success");
   }
 
   async function onSubmit(data: ReportForm) {
@@ -109,6 +170,10 @@ export default function ReportPage() {
     try {
       if (!hasSupabaseConfig) {
         throw new Error("Missing Supabase configuration.");
+      }
+
+      if (hasPhotoError || isPhotoBusy) {
+        throw new Error("Photo validation is not complete.");
       }
 
       const birthDateValue = data.ageMode === "birthDate" ? data.birthDate : null;
@@ -122,47 +187,83 @@ export default function ReportPage() {
 
       let imageUrl: string | null = null;
 
-      if (photo) {
-        const compressed = await compressToGrayscaleJpeg(photo);
-        const storagePath = `reports/${compressed.fileName}`;
+      if (optimizedPhoto) {
+        const storagePath = `reports/${optimizedPhoto.name}`;
+        const imageHash = await sha256File(optimizedPhoto);
 
         const { error: uploadError } = await supabase.storage
           .from("person-photos")
-          .upload(storagePath, compressed.blob, {
-            contentType: "image/jpeg",
+          .upload(storagePath, optimizedPhoto, {
+            contentType: optimizedPhoto.type,
             upsert: false
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+            reason: "storage_upload_error",
+            optimized_file_size: optimizedPhoto.size,
+            mime_type: optimizedPhoto.type,
+            image_hash: imageHash
+          });
+          throw uploadError;
+        }
 
         const publicUrl = supabase.storage.from("person-photos").getPublicUrl(storagePath);
         imageUrl = publicUrl.data.publicUrl;
+
+        await logClientAuditEvent("UPLOAD_IMAGE_SUCCESS", {
+          storage_path: storagePath,
+          optimized_file_size: optimizedPhoto.size,
+          mime_type: optimizedPhoto.type,
+          image_hash: imageHash,
+          faces_detected: photoValidation?.metadata.facesDetected,
+          nsfw_scores: photoValidation?.metadata.nsfwScores
+        });
       }
 
-      const { error } = await supabase.from("missing_persons").insert({
-        full_name: data.fullName.trim(),
-        cedula: data.cedula.trim(),
-        gender: data.gender,
-        age: ageValue,
-        birth_date: birthDateValue,
-        status: data.status,
-        location_category: data.locationCategory,
-        location_detail:
-          data.locationCategory === "Otro..." ? data.locationDetail.trim() : data.locationDetail.trim() || null,
-        last_known_state: data.lastKnownState || null,
-        last_known_city: data.lastKnownCity.trim() || null,
-        last_known_parish: data.lastKnownParish.trim() || null,
-        image_url: imageUrl,
-        is_minor: minor,
-        accepted_terms: data.acceptedTerms,
-        terms_version: "2026-06-27"
+      const response = await fetch("/api/report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          full_name: data.fullName.trim(),
+          cedula: data.cedula.trim(),
+          gender: data.gender,
+          age: ageValue,
+          birth_date: birthDateValue,
+          status: data.status,
+          location_category: data.locationCategory,
+          location_detail:
+            data.locationCategory === "Otro..." ? data.locationDetail.trim() : data.locationDetail.trim() || null,
+          last_known_state: data.lastKnownState || null,
+          last_known_city: data.lastKnownCity.trim() || null,
+          last_known_parish: data.lastKnownParish.trim() || null,
+          image_url: imageUrl,
+          is_minor: minor,
+          accepted_terms: data.acceptedTerms,
+          terms_version: "2026-06-27",
+          audit_metadata: optimizedPhoto
+            ? {
+                optimized_file_size: optimizedPhoto.size,
+                mime_type: optimizedPhoto.type,
+                faces_detected: photoValidation?.metadata.facesDetected,
+                nsfw_scores: photoValidation?.metadata.nsfwScores
+              }
+            : null
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Report API failed.");
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       reset();
-      setPhoto(null);
+      if (photoValidation?.previewUrl) {
+        URL.revokeObjectURL(photoValidation.previewUrl);
+      }
+      setOptimizedPhoto(null);
+      setPhotoValidation(null);
+      setPhotoStatus("idle");
       setStep(1);
     } catch {
       setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
@@ -183,6 +284,7 @@ export default function ReportPage() {
         <p className="mt-2 leading-7 text-neutral-700">
           Completa solo lo que conozcas con seguridad. La foto sera reducida en este dispositivo antes de subirla.
         </p>
+        <AuditNotice />
 
         <form className="mt-6 grid gap-5" onSubmit={handleSubmit(onSubmit)}>
           {step === 1 ? (
@@ -303,12 +405,13 @@ export default function ReportPage() {
 
               <Field label="Foto opcional">
                 <input
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className={inputClass}
-                  onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
+                  onChange={handlePhotoChange}
                   type="file"
                 />
               </Field>
+              <PhotoValidationPanel result={photoValidation} status={photoStatus} />
             </section>
           ) : null}
 
@@ -375,11 +478,16 @@ export default function ReportPage() {
               </button>
             ) : null}
             {step < 3 ? (
-              <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" onClick={goNext} type="button">
-                Continuar
+              <button
+                className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50"
+                disabled={step === 2 && (isPhotoBusy || hasPhotoError)}
+                onClick={goNext}
+                type="button"
+              >
+                {isPhotoBusy ? "Validando foto..." : "Continuar"}
               </button>
             ) : (
-              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !watch("acceptedTerms")} type="submit">
+              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !acceptedTerms || isPhotoBusy || hasPhotoError} type="submit">
                 {isSubmitting ? "Enviando..." : "Enviar Reporte"}
               </button>
             )}
@@ -400,4 +508,93 @@ function Field({ label, error, children }: { label: string; error?: string; chil
       {error ? <span className="text-sm font-semibold text-alert">{error}</span> : null}
     </label>
   );
+}
+
+function AuditNotice() {
+  return (
+    <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
+      Por seguridad y prevencion de abusos, esta plataforma registra auditoria tecnica minima sobre cargas, consultas,
+      visualizaciones y descargas. Puede incluir fecha, IP aproximada, navegador, accion realizada y registros
+      consultados, y preservarse ante requerimientos legales.
+    </p>
+  );
+}
+
+function PhotoValidationPanel({
+  result,
+  status
+}: {
+  result: ImageValidationResult | null;
+  status: "idle" | "validating" | "error" | "success";
+}) {
+  if (status === "idle") return null;
+
+  if (status === "validating") {
+    return <p className="rounded-md border border-neutral-300 bg-white p-3 text-sm font-bold text-neutral-700">Validando y optimizando la imagen...</p>;
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm">
+      {result?.previewUrl ? (
+        <Image
+          alt="Vista previa optimizada"
+          className="aspect-square w-32 rounded-md border border-neutral-300 object-cover"
+          height={128}
+          src={result.previewUrl}
+          unoptimized
+          width={128}
+        />
+      ) : null}
+
+      {result?.errors.map((error) => (
+        <p className="font-bold text-alert" key={error}>
+          {error}
+        </p>
+      ))}
+
+      {result?.warnings.map((warning) => (
+        <p className="font-semibold text-neutral-700" key={warning}>
+          {warning}
+        </p>
+      ))}
+
+      {result?.metadata.optimizedSize ? (
+        <p className="text-neutral-600">
+          Imagen optimizada: {formatBytes(result.metadata.optimizedSize)} / {result.metadata.width}x{result.metadata.height}px.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+async function logClientAuditEvent(eventType: "UPLOAD_IMAGE_ATTEMPT" | "UPLOAD_IMAGE_SUCCESS" | "UPLOAD_IMAGE_REJECTED", metadata: Record<string, unknown>) {
+  try {
+    await fetch("/api/audit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        eventType,
+        entityType: "person_photo",
+        statusCode: eventType === "UPLOAD_IMAGE_REJECTED" ? 400 : 200,
+        metadata
+      })
+    });
+  } catch {
+    // Client-side audit is best-effort and must not block humanitarian reporting.
+  }
+}
+
+async function sha256File(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }

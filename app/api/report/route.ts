@@ -1,0 +1,129 @@
+import { NextResponse } from "next/server";
+import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
+import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
+
+type ReportRequestBody = {
+  full_name?: string;
+  cedula?: string;
+  gender?: string;
+  age?: number | null;
+  birth_date?: string | null;
+  status?: string;
+  location_category?: string;
+  location_detail?: string | null;
+  last_known_state?: string | null;
+  last_known_city?: string | null;
+  last_known_parish?: string | null;
+  image_url?: string | null;
+  is_minor?: boolean;
+  accepted_terms?: boolean;
+  terms_version?: string;
+  audit_metadata?: Record<string, unknown>;
+};
+
+export async function POST(request: Request) {
+  const requestId = createAuditRequestId();
+
+  if (!hasSupabaseConfig) {
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      request,
+      requestId,
+      statusCode: 503,
+      metadata: { error: "missing_supabase_public_config" }
+    });
+
+    return NextResponse.json({ error: "El servicio no esta configurado para recibir reportes." }, { status: 503 });
+  }
+
+  try {
+    const body = (await request.json()) as ReportRequestBody;
+
+    // age and birth_date are optional (emergencies may only yield one or neither),
+    // but when age is provided it must be a valid number.
+    if (
+      !body.accepted_terms ||
+      !body.cedula ||
+      !body.full_name ||
+      (body.age != null && typeof body.age !== "number")
+    ) {
+      await logAuditEventSafely({
+        eventType: "CREATE_PERSON_REPORT",
+        request,
+        requestId,
+        statusCode: 400,
+        metadata: { error: "invalid_report_payload" }
+      });
+
+      return NextResponse.json({ error: "Faltan datos obligatorios para crear el reporte." }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from("missing_persons")
+      .insert({
+        full_name: body.full_name.trim(),
+        cedula: body.cedula.trim(),
+        gender: body.gender,
+        age: body.age ?? null,
+        birth_date: body.birth_date ?? null,
+        status: body.status,
+        location_category: body.location_category,
+        location_detail: body.location_detail,
+        last_known_state: body.last_known_state,
+        last_known_city: body.last_known_city,
+        last_known_parish: body.last_known_parish,
+        image_url: body.image_url,
+        is_minor: body.is_minor,
+        accepted_terms: body.accepted_terms,
+        terms_version: body.terms_version
+      })
+      .select("id,status,is_minor,last_known_state")
+      .single();
+
+    if (error) {
+      await logAuditEventSafely({
+        eventType: "CREATE_PERSON_REPORT",
+        request,
+        requestId,
+        statusCode: 400,
+        metadata: {
+          error: error.code,
+          cedula_hash: hashAuditValue(body.cedula.trim()),
+          birth_date_hash: body.birth_date ? hashAuditValue(body.birth_date) : null
+        }
+      });
+
+      return NextResponse.json({ error: "No se pudo guardar el reporte." }, { status: 400 });
+    }
+
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      entityType: "missing_person",
+      entityId: data.id,
+      request,
+      requestId,
+      statusCode: 201,
+      metadata: {
+        status: data.status,
+        is_minor: data.is_minor,
+        last_known_state: data.last_known_state,
+        has_image: Boolean(body.image_url),
+        cedula_hash: hashAuditValue(body.cedula.trim()),
+        birth_date_hash: body.birth_date ? hashAuditValue(body.birth_date) : null,
+        image: body.audit_metadata ?? null
+      }
+    });
+
+    return NextResponse.json({ id: data.id, requestId }, { status: 201 });
+  } catch {
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      request,
+      requestId,
+      statusCode: 500,
+      metadata: { error: "unexpected_report_error" }
+    });
+
+    return NextResponse.json({ error: "No se pudo guardar el reporte." }, { status: 500 });
+  }
+}
