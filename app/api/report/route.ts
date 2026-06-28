@@ -21,6 +21,24 @@ type ReportRequestBody = {
   audit_metadata?: Record<string, unknown>;
 };
 
+type ValidReportPayload = {
+  full_name: string;
+  cedula: string;
+  age: number;
+  birth_date: string;
+  accepted_terms: true;
+} & Partial<Omit<ReportRequestBody, "full_name" | "cedula" | "age" | "birth_date" | "accepted_terms">>;
+
+function isValidReportPayload(body: ReportRequestBody): body is ValidReportPayload {
+  return (
+    body.accepted_terms === true &&
+    typeof body.cedula === "string" && body.cedula.trim().length > 0 &&
+    typeof body.full_name === "string" && body.full_name.trim().length > 0 &&
+    typeof body.birth_date === "string" && body.birth_date.trim().length > 0 &&
+    typeof body.age === "number" && Number.isFinite(body.age)
+  );
+}
+
 export async function POST(request: Request) {
   const requestId = createAuditRequestId();
 
@@ -39,7 +57,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ReportRequestBody;
 
-    if (!body.accepted_terms || !body.cedula || !body.birth_date || !body.full_name || typeof body.age !== "number") {
+    if (!isValidReportPayload(body)) {
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
@@ -48,7 +66,7 @@ export async function POST(request: Request) {
         metadata: { error: "invalid_report_payload" }
       });
 
-      return NextResponse.json({ error: "Faltan datos obligatorios para crear el reporte." }, { status: 400 });
+      return NextResponse.json({ error: "Faltan datos obligatorios o el reporte no es valido." }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -74,19 +92,29 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
+      const duplicateReport =
+        error.code === "23505" ||
+        String(error.details).toLowerCase().includes("duplicate") ||
+        String(error.details).toLowerCase().includes("cedula") && String(error.details).toLowerCase().includes("birth_date");
+      const errorMessage = duplicateReport
+        ? "Ya existe un reporte con la misma cedula y fecha de nacimiento."
+        : "No se pudo guardar el reporte.";
+      const responseStatus = duplicateReport ? 409 : 400;
+
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
         requestId,
-        statusCode: 400,
+        statusCode: responseStatus,
         metadata: {
-          error: error.code,
+          error: error.code ?? "unknown_insert_error",
+          details: error.details ?? error.message,
           cedula_hash: hashAuditValue(body.cedula.trim()),
           birth_date_hash: hashAuditValue(body.birth_date)
         }
       });
 
-      return NextResponse.json({ error: "No se pudo guardar el reporte." }, { status: 400 });
+      return NextResponse.json({ error: errorMessage }, { status: responseStatus });
     }
 
     await logAuditEventSafely({

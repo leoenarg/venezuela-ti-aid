@@ -229,7 +229,11 @@ export default function ReportPage() {
         })
       });
 
-      if (!response.ok) throw new Error("Report API failed.");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const messageText = typeof errorData?.error === "string" ? errorData.error : "No se pudo enviar el reporte.";
+        throw new Error(messageText);
+      }
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       reset();
@@ -240,8 +244,10 @@ export default function ReportPage() {
       setPhotoValidation(null);
       setPhotoStatus("idle");
       setStep(1);
-    } catch {
-      setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
+    } catch (error) {
+      console.error("Report submission failed", error);
+      const errorMessage = error instanceof Error ? error.message : "No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.";
+      setMessage(errorMessage || "No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
