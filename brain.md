@@ -18,6 +18,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Do not add paid services or processing pipelines; the project is free-tier oriented.
 - Use client-side image compression before upload.
 - Validate report images on the client before upload with `lib/imageValidation.ts`; it checks real image signatures, size, dimensions, face presence, NSFW risk, blur warning, and returns only an optimized file for storage.
+- Keep defensive audit logging proportional. Server routes log report creation, exact searches, result views, and image upload events via `lib/audit.ts` and `supabase/audit.sql`.
 - Assume hostile scraping attempts and political misuse are realistic risks.
 
 ## Current Stack
@@ -26,6 +27,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Tailwind CSS
 - Supabase PostgreSQL + Storage
 - Vercel deployment from GitHub
+- GitHub Actions for PR/version validation
 
 ## Important Routes
 
@@ -33,6 +35,9 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - `/report` multi-step report form.
 - `/search` exact-match private search.
 - `/legal` public terms, privacy, collaboration, and provider notice.
+- `/api/report` server-side report creation and audit logging.
+- `/api/search` server-side exact search and audit logging.
+- `/api/audit` limited client-triggered audit endpoint for image upload validation events.
 
 ## Data Model Notes
 
@@ -66,8 +71,10 @@ Anonymous direct reads are intentionally denied by RLS.
 
 1. Read `docs/privacy-and-data-protection.md` before touching data flows.
 2. Read `supabase/schema.sql` before changing database behavior.
-3. Run `npm run lint` and `npm run build`.
-4. If adding a field, update:
+3. Read `supabase/audit.sql` before changing audit behavior.
+4. Check `.github/workflows/validate-tag.yml` before changing release/tag behavior.
+5. Run `npm run lint` and `npm run build`.
+6. If adding a field, update:
    - Supabase schema
    - report form
    - search result masking
@@ -79,6 +86,22 @@ Anonymous direct reads are intentionally denied by RLS.
 The `/report` form calls `validateAndOptimizeImage(file)` when the user selects a photo. AI models are lazy-loaded in the browser only after selection: NSFWJS/TensorFlow for adult-content screening and MediaPipe Face Detector when the browser has no native `FaceDetector`. Do not move this validation server-side or to a paid/external inference API without a privacy review.
 
 Supabase Storage bucket `person-photos` must accept optimized `image/jpeg` and `image/webp` files. Keep file names random and avoid predictable paths.
+
+## Audit Notes
+
+Audit is defensive, append-only, and server-side. Required server-only environment variables are `SUPABASE_SERVICE_ROLE_KEY` and `AUDIT_SALT`. Never expose them through `NEXT_PUBLIC_*`.
+
+Integrated events: `UPLOAD_IMAGE_ATTEMPT`, `UPLOAD_IMAGE_SUCCESS`, `UPLOAD_IMAGE_REJECTED`, `CREATE_PERSON_REPORT`, `SEARCH_PERSON`, and `VIEW_PERSON_DETAIL`.
+
+Prepared but not yet integrated because no matching flow exists: `UPDATE_PERSON_REPORT`, `DOWNLOAD_IMAGE`, `DOWNLOAD_REPORT`, `ADMIN_REVIEW_APPROVED`, `ADMIN_REVIEW_REJECTED`, and `AUDIT_EXPORT`.
+
+Do not store raw cedula or birth date in audit metadata. Use salted hashes via `hashAuditValue`.
+
+## GitHub Governance Notes
+
+`.github/CODEOWNERS` currently names `@leoenarg` and `@ParkerPiter` as code owners.
+
+`.github/workflows/validate-tag.yml` runs on pull requests to `main` and expects a `VERSION` file to match the next tag in `v.DDMMYYletra` format. If the workflow stays enabled, keep `VERSION` synchronized with the expected tag; otherwise PR validation will fail.
 
 ## Forbidden Changes Without Human Review
 

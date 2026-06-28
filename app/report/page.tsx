@@ -64,11 +64,24 @@ export default function ReportPage() {
 
     setPhotoValidation(null);
     setPhotoStatus("validating");
+    await logClientAuditEvent("UPLOAD_IMAGE_ATTEMPT", {
+      original_file_size: selectedFile.size,
+      mime_type: selectedFile.type
+    });
 
     const result = await validateAndOptimizeImage(selectedFile);
     setPhotoValidation(result);
 
     if (!result.isValid || !result.optimizedFile) {
+      await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+        original_file_size: selectedFile.size,
+        mime_type: selectedFile.type,
+        validation_result: "rejected",
+        errors: result.errors,
+        warnings: result.warnings,
+        faces_detected: result.metadata.facesDetected,
+        nsfw_scores: result.metadata.nsfwScores
+      });
       setOptimizedPhoto(null);
       setPhotoStatus("error");
       return;
@@ -96,6 +109,7 @@ export default function ReportPage() {
 
       if (optimizedPhoto) {
         const storagePath = `reports/${optimizedPhoto.name}`;
+        const imageHash = await sha256File(optimizedPhoto);
 
         const { error: uploadError } = await supabase.storage
           .from("person-photos")
@@ -104,31 +118,62 @@ export default function ReportPage() {
             upsert: false
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+            reason: "storage_upload_error",
+            optimized_file_size: optimizedPhoto.size,
+            mime_type: optimizedPhoto.type,
+            image_hash: imageHash
+          });
+          throw uploadError;
+        }
 
         const publicUrl = supabase.storage.from("person-photos").getPublicUrl(storagePath);
         imageUrl = publicUrl.data.publicUrl;
+
+        await logClientAuditEvent("UPLOAD_IMAGE_SUCCESS", {
+          storage_path: storagePath,
+          optimized_file_size: optimizedPhoto.size,
+          mime_type: optimizedPhoto.type,
+          image_hash: imageHash,
+          faces_detected: photoValidation?.metadata.facesDetected,
+          nsfw_scores: photoValidation?.metadata.nsfwScores
+        });
       }
 
-      const { error } = await supabase.from("missing_persons").insert({
-        full_name: fullName.trim(),
-        cedula: cedula.trim(),
-        gender,
-        age: Number(age),
-        birth_date: birthDate,
-        status,
-        location_category: locationCategory,
-        location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
-        last_known_state: lastKnownState || null,
-        last_known_city: lastKnownCity.trim() || null,
-        last_known_parish: lastKnownParish.trim() || null,
-        image_url: imageUrl,
-        is_minor: isMinor,
-        accepted_terms: acceptedTerms,
-        terms_version: "2026-06-27"
+      const response = await fetch("/api/report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          cedula: cedula.trim(),
+          gender,
+          age: Number(age),
+          birth_date: birthDate,
+          status,
+          location_category: locationCategory,
+          location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
+          last_known_state: lastKnownState || null,
+          last_known_city: lastKnownCity.trim() || null,
+          last_known_parish: lastKnownParish.trim() || null,
+          image_url: imageUrl,
+          is_minor: isMinor,
+          accepted_terms: acceptedTerms,
+          terms_version: "2026-06-27",
+          audit_metadata: optimizedPhoto
+            ? {
+                optimized_file_size: optimizedPhoto.size,
+                mime_type: optimizedPhoto.type,
+                faces_detected: photoValidation?.metadata.facesDetected,
+                nsfw_scores: photoValidation?.metadata.nsfwScores
+              }
+            : null
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Report API failed.");
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       setFullName("");
@@ -171,6 +216,7 @@ export default function ReportPage() {
         <p className="mt-2 leading-7 text-neutral-700">
           Completa solo lo que conozcas con seguridad. La foto sera reducida en este dispositivo antes de subirla.
         </p>
+        <AuditNotice />
 
         <form className="mt-6 grid gap-5" onSubmit={submitReport}>
           {step === 1 ? (
@@ -306,6 +352,16 @@ export default function ReportPage() {
   );
 }
 
+function AuditNotice() {
+  return (
+    <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
+      Por seguridad y prevencion de abusos, esta plataforma registra auditoria tecnica minima sobre cargas, consultas,
+      visualizaciones y descargas. Puede incluir fecha, IP aproximada, navegador, accion realizada y registros
+      consultados, y preservarse ante requerimientos legales.
+    </p>
+  );
+}
+
 function PhotoValidationPanel({
   result,
   status
@@ -356,6 +412,33 @@ function PhotoValidationPanel({
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   return `${Math.round(bytes / 1024)} KB`;
+}
+
+async function logClientAuditEvent(eventType: "UPLOAD_IMAGE_ATTEMPT" | "UPLOAD_IMAGE_SUCCESS" | "UPLOAD_IMAGE_REJECTED", metadata: Record<string, unknown>) {
+  try {
+    await fetch("/api/audit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        eventType,
+        entityType: "person_photo",
+        statusCode: eventType === "UPLOAD_IMAGE_REJECTED" ? 400 : 200,
+        metadata
+      })
+    });
+  } catch {
+    // Client-side audit is best-effort and must not block humanitarian reporting.
+  }
+}
+
+async function sha256File(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function TextField({

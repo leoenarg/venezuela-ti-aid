@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { SearchResult, supabase } from "@/lib/supabaseClient";
+import { SearchResult } from "@/lib/supabaseClient";
 
 const statusLabels: Record<string, string> = {
   missing: "Persona perdida",
@@ -25,14 +25,21 @@ export default function SearchPage() {
     setIsSearching(true);
 
     try {
-      const { data, error } = await supabase.rpc("search_missing_person", {
-        search_cedula: cedula.trim(),
-        search_birth_date: birthDate
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          cedula: cedula.trim(),
+          birthDate
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Search API failed.");
 
-      const match = Array.isArray(data) ? (data[0] as SearchResult | undefined) : null;
+      const data = (await response.json()) as { result: SearchResult | null };
+      const match = data.result;
       if (!match) {
         setMessage("No encontramos una coincidencia exacta. Verifica los datos e intenta nuevamente.");
         return;
@@ -57,6 +64,10 @@ export default function SearchPage() {
 
         <h1 className="text-3xl font-black">Buscar un Familiar</h1>
         <p className="mt-2 leading-7 text-neutral-700">Por seguridad, solo se muestran resultados con cedula y fecha de nacimiento exactas.</p>
+        <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
+          Por seguridad y prevencion de abusos, esta consulta registra auditoria tecnica minima: fecha, IP aproximada,
+          navegador, accion realizada y si hubo coincidencia exacta.
+        </p>
 
         <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={search}>
           <label className="grid gap-2 font-bold">

@@ -19,8 +19,15 @@ Contributors must:
 - Avoid logging submitted data.
 - Keep dependencies minimal.
 - Run lint and build before pushing.
+- Keep `VERSION` synchronized with the next expected `v.DDMMYYletra` tag when opening pull requests to `main`, if the tag validation workflow is enabled.
 - Preserve RLS and exact-match search behavior.
 - Report suspected vulnerabilities privately.
+
+## Pull Requests and Ownership
+
+Pull requests into `main` are checked by GitHub Actions. The current workflow validates the expected release version from tags using `.github/workflows/validate-tag.yml`.
+
+The repository uses `.github/CODEOWNERS` for ownership review. Changes to privacy, Supabase schema, audit logging, RLS, storage policy, legal text, or deployment configuration should be reviewed by a code owner before merging.
 
 ## AI Assistant Rules
 
@@ -52,6 +59,8 @@ Before merging privacy-sensitive changes:
 - Is it necessary for humanitarian assistance?
 - Is it disclosed in `/legal`?
 - Is it protected by RLS or RPC boundaries?
+- Does it preserve defensive audit logging without adding invasive tracking?
 - Does it affect minors?
 - Does it create a scraping path?
 - Does it introduce a new provider or data transfer?
+- Does the PR satisfy version/tag validation requirements?

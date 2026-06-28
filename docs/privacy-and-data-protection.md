@@ -18,9 +18,10 @@ The application may collect:
 - Location or institution category.
 - Optional location detail.
 - Optional last-known state, city, and parish.
-- Optional optimized grayscale photo.
+- Optional validated and optimized photo.
 - Whether the person is a minor.
 - Consent acknowledgement and terms version.
+- Defensive technical audit records for abuse prevention, including timestamp, approximate IP or IP hash, user-agent, request path, action type, status, and minimized metadata.
 
 ## Sensitive Data Rules
 
@@ -30,6 +31,8 @@ The application may collect:
 - Do not provide CSV exports from public interfaces.
 - Do not add tracking or behavioral analytics.
 - Do not submit user data to AI APIs, facial recognition APIs, marketing APIs, or enrichment providers.
+- Do not use audit logging for invasive tracking, behavioral profiling, advertising, or political monitoring.
+- Do not collect exact GPS location, contacts, third-party cookies, or aggressive device fingerprinting.
 
 ## Minors
 
@@ -40,6 +43,12 @@ Search results for minors must be masked or structurally reduced. The current sc
 ## Search
 
 Public search must use exact `cedula` + `birth_date`. A failed search must return a generic message and must not reveal whether either value exists.
+
+## Defensive Audit
+
+The project may keep append-only audit records for loads, searches, result views, downloads, and administrative decisions. The purpose is forensic integrity, abuse prevention, and lawful response to competent authorities.
+
+Audit metadata must be minimized. When identity values are useful for investigation, store salted hashes instead of raw cedula or birth date whenever possible. Audit failures should not block humanitarian reporting or searching unless a future sensitive download route explicitly requires audit success.
 
 ## Infrastructure Providers
 
