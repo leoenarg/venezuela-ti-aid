@@ -7,7 +7,7 @@ import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
-import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
+import { calculateAge, cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
 
@@ -40,6 +40,7 @@ export default function ReportPage() {
     watch,
     trigger,
     reset,
+    setValue,
     formState: { errors }
   } = useForm<ReportFormValues>({
     defaultValues: {
@@ -71,6 +72,16 @@ export default function ReportPage() {
   const acceptedTerms = watch("acceptedTerms");
 
   const cedulaField = register("cedula", cedulaRules);
+
+  // Birth date drives the age field: age is derived, never typed by hand.
+  const birthDateRegistration = register("birthDate", { required: "La fecha de nacimiento es obligatoria." });
+  const birthDateField: UseFormRegisterReturn = {
+    ...birthDateRegistration,
+    onChange: (event) => {
+      setValue("age", calculateAge(event.target.value), { shouldValidate: true });
+      return birthDateRegistration.onChange(event);
+    }
+  };
 
   const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
   const isPhotoBusy = photoStatus === "validating";
@@ -306,21 +317,23 @@ export default function ReportPage() {
           {step === 2 ? (
             <section className="grid gap-4">
               <TextField
+                label="Fecha de nacimiento"
+                type="date"
+                registration={birthDateField}
+                error={errors.birthDate?.message}
+                required
+              />
+              <TextField
                 label="Edad"
                 min="0"
                 type="number"
+                readOnly
+                hint="Se calcula automaticamente a partir de la fecha de nacimiento."
                 registration={register("age", {
                   required: "La edad es obligatoria.",
                   min: { value: 0, message: "La edad no puede ser negativa." }
                 })}
                 error={errors.age?.message}
-                required
-              />
-              <TextField
-                label="Fecha de nacimiento"
-                type="date"
-                registration={register("birthDate", { required: "La fecha de nacimiento es obligatoria." })}
-                error={errors.birthDate?.message}
                 required
               />
               {isMinor ? <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">El reporte sera marcado como menor de edad.</p> : null}
@@ -522,7 +535,9 @@ function TextField({
   required = false,
   min,
   inputMode,
-  error
+  error,
+  readOnly = false,
+  hint
 }: {
   label: string;
   registration: UseFormRegisterReturn;
@@ -531,18 +546,22 @@ function TextField({
   min?: string;
   inputMode?: "numeric" | "text";
   error?: string;
+  readOnly?: boolean;
+  hint?: string;
 }) {
   return (
     <label className="grid gap-2 font-bold">
       {label}
       <input
-        className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
+        className={`focus-ring rounded-md border border-neutral-400 px-3 py-3 ${readOnly ? "bg-neutral-100 text-neutral-700" : "bg-white"}`}
         min={min}
         inputMode={inputMode}
+        readOnly={readOnly}
         required={required}
         type={type}
         {...registration}
       />
+      {hint ? <span className="text-sm font-normal text-neutral-600">{hint}</span> : null}
       {error ? <span className="text-sm font-semibold text-alert">{error}</span> : null}
     </label>
   );
