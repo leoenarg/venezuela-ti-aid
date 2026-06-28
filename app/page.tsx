@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { StateStatusStats, VenezuelaRiskMap } from "@/components/VenezuelaRiskMap";
+import { VetClinicsDirectory } from "@/components/VetClinicsDirectory";
 import { PublicStats, supabase } from "@/lib/supabaseClient";
 
 const fallbackStats: PublicStats = {
@@ -91,6 +92,8 @@ export default function HomePage() {
           </div>
 
           <VenezuelaRiskMap stateStats={stateStats} />
+
+          <VetClinicsDirectory />
         </div>
       </section>
 
