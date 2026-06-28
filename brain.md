@@ -17,6 +17,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Do not send user-submitted data to third-party AI services.
 - Do not add paid services or processing pipelines; the project is free-tier oriented.
 - Use client-side image compression before upload.
+- Validate report images on the client before upload with `lib/imageValidation.ts`; it checks real image signatures, size, dimensions, face presence, NSFW risk, blur warning, and returns only an optimized file for storage.
 - Assume hostile scraping attempts and political misuse are realistic risks.
 
 ## Current Stack
@@ -72,6 +73,12 @@ Anonymous direct reads are intentionally denied by RLS.
    - search result masking
    - legal/privacy text when relevant
    - this file if the field changes risk
+
+## Image Upload Notes
+
+The `/report` form calls `validateAndOptimizeImage(file)` when the user selects a photo. AI models are lazy-loaded in the browser only after selection: NSFWJS/TensorFlow for adult-content screening and MediaPipe Face Detector when the browser has no native `FaceDetector`. Do not move this validation server-side or to a paid/external inference API without a privacy review.
+
+Supabase Storage bucket `person-photos` must accept optimized `image/jpeg` and `image/webp` files. Keep file names random and avoid predictable paths.
 
 ## Forbidden Changes Without Human Review
 

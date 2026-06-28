@@ -12,7 +12,7 @@ Aplicacion humanitaria, mobile-first y privacy-first para reportar y buscar pers
 ## Rutas
 
 - `/` tablero publico con contadores livianos y acciones principales.
-- `/report` formulario multi-paso con compresion local de imagenes por canvas.
+- `/report` formulario multi-paso con validacion local de imagenes, deteccion de rostro, filtro NSFW y optimizacion antes de subir.
 - `/search` busqueda exacta por cedula y fecha de nacimiento.
 - `/legal` terminos, privacidad, reglas de colaboracion y aviso de proveedores.
 
