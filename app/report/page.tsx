@@ -234,8 +234,12 @@ export default function ReportPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        const messageText = typeof errorData?.error === "string" ? errorData.error : "No se pudo enviar el reporte.";
-        throw new Error(messageText);
+        const detailText = Array.isArray(errorData?.details)
+          ? errorData.details.join(" ")
+          : typeof errorData?.error === "string"
+          ? errorData.error
+          : "No se pudo enviar el reporte.";
+        throw new Error(detailText);
       }
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");

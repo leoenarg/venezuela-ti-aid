@@ -38,19 +38,45 @@ type ValidReportPayload = {
   terms_version: string;
 } & Partial<Omit<ReportRequestBody, "full_name" | "cedula" | "gender" | "age" | "birth_date" | "status" | "location_category" | "is_minor" | "accepted_terms" | "terms_version">>;
 
+function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
+  const errors: string[] = [];
+
+  if (body.accepted_terms !== true) {
+    errors.push("accepted_terms debe ser verdadero.");
+  }
+  if (typeof body.cedula !== "string" || body.cedula.trim().length === 0) {
+    errors.push("cedula es obligatoria.");
+  }
+  if (typeof body.full_name !== "string" || body.full_name.trim().length === 0) {
+    errors.push("full_name es obligatoria.");
+  }
+  if (typeof body.birth_date !== "string" || body.birth_date.trim().length === 0) {
+    errors.push("birth_date es obligatoria.");
+  }
+  if (typeof body.age !== "number" || !Number.isFinite(body.age)) {
+    errors.push("age debe ser un numero valido.");
+  }
+  if (typeof body.gender !== "string" || !GENDER_OPTIONS.includes(body.gender as any)) {
+    errors.push("gender no es valido.");
+  }
+  if (typeof body.status !== "string" || !STATUS_OPTIONS.includes(body.status as any)) {
+    errors.push("status no es valido.");
+  }
+  if (typeof body.location_category !== "string" || !LOCATION_OPTIONS.includes(body.location_category as any)) {
+    errors.push("location_category no es valido.");
+  }
+  if (typeof body.is_minor !== "boolean") {
+    errors.push("is_minor debe ser booleano.");
+  }
+  if (typeof body.terms_version !== "string" || body.terms_version.trim().length === 0) {
+    errors.push("terms_version es obligatoria.");
+  }
+
+  return errors;
+}
+
 function isValidReportPayload(body: ReportRequestBody): body is ValidReportPayload {
-  return (
-    body.accepted_terms === true &&
-    typeof body.cedula === "string" && body.cedula.trim().length > 0 &&
-    typeof body.full_name === "string" && body.full_name.trim().length > 0 &&
-    typeof body.birth_date === "string" && body.birth_date.trim().length > 0 &&
-    typeof body.age === "number" && Number.isFinite(body.age) &&
-    typeof body.gender === "string" && GENDER_OPTIONS.includes(body.gender as any) &&
-    typeof body.status === "string" && STATUS_OPTIONS.includes(body.status as any) &&
-    typeof body.location_category === "string" && LOCATION_OPTIONS.includes(body.location_category as any) &&
-    typeof body.is_minor === "boolean" &&
-    typeof body.terms_version === "string" && body.terms_version.trim().length > 0
-  );
+  return getReportPayloadValidationErrors(body).length === 0;
 }
 
 export async function POST(request: Request) {
@@ -70,17 +96,24 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as ReportRequestBody;
+    const payloadErrors = getReportPayloadValidationErrors(body);
 
-    if (!isValidReportPayload(body)) {
+    if (payloadErrors.length > 0) {
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
         requestId,
         statusCode: 400,
-        metadata: { error: "invalid_report_payload" }
+        metadata: {
+          error: "invalid_report_payload",
+          validation_errors: payloadErrors
+        }
       });
 
-      return NextResponse.json({ error: "Faltan datos obligatorios o el reporte no es valido." }, { status: 400 });
+      return NextResponse.json({
+        error: "Faltan datos obligatorios o el reporte no es valido.",
+        details: payloadErrors
+      }, { status: 400 });
     }
 
     const { data, error } = await supabase
