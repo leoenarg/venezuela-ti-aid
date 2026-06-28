@@ -30,7 +30,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 AUDIT_SALT=
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` y `AUDIT_SALT` son solo de servidor y se usan para auditoria defensiva. Los flujos publicos de reporte y busqueda deben seguir funcionando con anon key y RLS aunque la auditoria falle. No deben usarse en componentes cliente ni exponerse como `NEXT_PUBLIC_*`.
+`SUPABASE_SERVICE_ROLE_KEY` y `AUDIT_SALT` son solo de servidor. No deben usarse en componentes cliente ni exponerse como `NEXT_PUBLIC_*`.
 
 5. Instala dependencias y levanta la app:
 
