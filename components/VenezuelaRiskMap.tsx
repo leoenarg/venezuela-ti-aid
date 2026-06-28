@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { riskColors, riskLabels, statusLabels, VenezuelaState, venezuelaStates } from "@/lib/venezuelaData";
+import { riskColors, riskLabels, statusLabels, venezuelaStates } from "@/lib/venezuelaData";
 
 export type StateStatusStats = {
   state: string;
@@ -15,6 +15,11 @@ type Props = {
   stateStats: StateStatusStats[];
 };
 
+type MarkerPosition = {
+  x: number;
+  y: number;
+};
+
 const emptyStats = {
   missing: 0,
   found_alive: 0,
@@ -22,8 +27,35 @@ const emptyStats = {
   critical_health: 0
 };
 
+const markerPositions: Record<string, MarkerPosition> = {
+  zulia: { x: 13.5, y: 25 },
+  falcon: { x: 25.5, y: 18 },
+  lara: { x: 26.5, y: 25 },
+  yaracuy: { x: 31.5, y: 24 },
+  carabobo: { x: 36.4, y: 25.5 },
+  aragua: { x: 41, y: 26.2 },
+  la_guaira: { x: 43, y: 19.4 },
+  distrito_capital: { x: 46, y: 23.4 },
+  miranda: { x: 49, y: 25 },
+  cojedes: { x: 35.5, y: 30.5 },
+  portuguesa: { x: 28.4, y: 35.2 },
+  trujillo: { x: 19.2, y: 31 },
+  merida: { x: 15.5, y: 39.5 },
+  tachira: { x: 10.8, y: 43.4 },
+  barinas: { x: 24, y: 41.2 },
+  apure: { x: 35, y: 51 },
+  guarico: { x: 46.2, y: 36.7 },
+  anzoategui: { x: 60.5, y: 33.5 },
+  sucre: { x: 68.6, y: 23.2 },
+  monagas: { x: 66.7, y: 30.3 },
+  delta_amacuro: { x: 78, y: 36.8 },
+  bolivar: { x: 62.2, y: 58 },
+  amazonas: { x: 47.8, y: 76.5 },
+  nueva_esparta: { x: 64.3, y: 18 }
+};
+
 export function VenezuelaRiskMap({ stateStats }: Props) {
-  const [selectedCode, setSelectedCode] = useState(venezuelaStates[0].code);
+  const [selectedCode, setSelectedCode] = useState("zulia");
   const selectedState = venezuelaStates.find((state) => state.code === selectedCode) ?? venezuelaStates[0];
 
   const statsByState = useMemo(() => {
@@ -41,57 +73,49 @@ export function VenezuelaRiskMap({ stateStats }: Props) {
               Mapa de riesgo sismico
             </h2>
             <p className="mt-1 max-w-xl text-sm leading-6 text-neutral-700">
-              Infografia referencial por estado. Pasa el mouse o enfoca un estado para ver ciudades y reportes.
+              Mapa base referencial de Venezuela con marcadores interactivos de riesgo por estado.
             </p>
           </div>
           <RiskLegend />
         </div>
 
-        <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-neutral-200 bg-slate-50">
-          <svg className="block h-auto w-[760px] max-w-none lg:w-full" role="img" aria-label="Mapa simplificado de Venezuela por riesgo sismico" viewBox="0 0 740 570">
-            <rect fill="#f8fafc" height="570" rx="18" width="740" />
-            <path
-              d="M43 130 L82 82 L126 75 L215 55 L252 88 L392 86 L544 58 L604 48 L638 62 L620 84 L684 82 L704 120 L648 150 L590 118 L632 170 L694 236 L704 334 L626 376 L554 492 L398 510 L388 552 L238 552 L112 464 L34 364 L54 332 L58 292 L76 260 L43 208 Z"
-              fill="#ffffff"
-              opacity="0.65"
-              stroke="#0f172a"
-              strokeLinejoin="round"
-              strokeWidth="4"
+        <div className="mt-4 w-full max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-neutral-200 bg-sky-100">
+          <div className="relative w-[900px] max-w-none lg:w-full">
+            {/* Plain img avoids provider-side image optimization and keeps this free-tier friendly. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt="Mapa politico referencial de Venezuela con estados"
+              className="block h-auto w-full grayscale-[35%] saturate-75"
+              src="/venezuela-reference-map.png"
             />
+
             {venezuelaStates.map((state) => {
-              const fill = riskColors[state.risk];
-              const isSelected = selectedCode === state.code;
+              const marker = markerPositions[state.code];
+              const isSelected = state.code === selectedCode;
+
+              if (!marker) return null;
 
               return (
-                <g key={state.code}>
-                  <path
-                    aria-label={`${state.name}: ${riskLabels[state.risk]}`}
-                    className="cursor-pointer transition duration-150 hover:brightness-95 focus:outline-none"
-                    d={state.path}
-                    fill={fill}
-                    onBlur={() => undefined}
-                    onFocus={() => setSelectedCode(state.code)}
-                    onMouseEnter={() => setSelectedCode(state.code)}
-                    stroke={isSelected ? "#151515" : "#737373"}
-                    strokeLinejoin="round"
-                    strokeWidth={isSelected ? 3 : 1.3}
-                    tabIndex={0}
-                  >
-                    <title>{`${state.name} - ${riskLabels[state.risk]} - ${state.cities.join(", ")}`}</title>
-                  </path>
-                  <text
-                    className="pointer-events-none select-none text-[10px] font-black"
-                    fill={state.risk >= 5 ? "#ffffff" : "#151515"}
-                    textAnchor="middle"
-                    x={state.labelX}
-                    y={state.labelY}
-                  >
-                    {shortName(state.name)}
-                  </text>
-                </g>
+                <button
+                  aria-label={`${state.name}: ${riskLabels[state.risk]}`}
+                  className="focus-ring absolute grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[10px] font-black text-white shadow-md transition hover:scale-110"
+                  key={state.code}
+                  onFocus={() => setSelectedCode(state.code)}
+                  onMouseEnter={() => setSelectedCode(state.code)}
+                  style={{
+                    backgroundColor: riskColors[state.risk],
+                    boxShadow: isSelected ? "0 0 0 4px rgba(21, 21, 21, 0.35)" : undefined,
+                    left: `${marker.x}%`,
+                    top: `${marker.y}%`
+                  }}
+                  title={`${state.name} - ${riskLabels[state.risk]} - ${state.cities.join(", ")}`}
+                  type="button"
+                >
+                  {state.risk}
+                </button>
               );
             })}
-          </svg>
+          </div>
         </div>
       </div>
 
@@ -179,16 +203,4 @@ function RiskLegend() {
       </div>
     </div>
   );
-}
-
-function shortName(name: VenezuelaState["name"]) {
-  const labels: Record<string, string> = {
-    Distrito: "DC",
-    "Distrito Capital": "DC",
-    "Delta Amacuro": "Delta",
-    "Nueva Esparta": "N. Esparta",
-    "La Guaira": "Guaira"
-  };
-
-  return labels[name] ?? name;
 }
