@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
@@ -172,9 +173,11 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const reportId = randomUUID();
+    const { error } = await supabase
       .from("missing_persons")
       .insert({
+        id: reportId,
         full_name: body.full_name.trim(),
         cedula: body.cedula.trim(),
         gender: body.gender,
@@ -190,9 +193,7 @@ export async function POST(request: Request) {
         is_minor: body.is_minor,
         accepted_terms: body.accepted_terms,
         terms_version: body.terms_version
-      })
-      .select("id,status,is_minor,last_known_state")
-      .single();
+      });
 
     if (error) {
       const insertError = classifyReportInsertError(error);
@@ -229,14 +230,14 @@ export async function POST(request: Request) {
     await logAuditEventSafely({
       eventType: "CREATE_PERSON_REPORT",
       entityType: "missing_person",
-      entityId: data.id,
+      entityId: reportId,
       request,
       requestId,
       statusCode: 201,
       metadata: {
-        status: data.status,
-        is_minor: data.is_minor,
-        last_known_state: data.last_known_state,
+        status: body.status,
+        is_minor: body.is_minor,
+        last_known_state: body.last_known_state,
         has_image: Boolean(body.image_url),
         cedula_hash: hashAuditValue(body.cedula.trim()),
         birth_date_hash: hashAuditValue(body.birth_date),
@@ -244,7 +245,7 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ id: data.id, requestId }, { status: 201 });
+    return NextResponse.json({ id: reportId, requestId }, { status: 201 });
   } catch {
     await logAuditEventSafely({
       eventType: "CREATE_PERSON_REPORT",
