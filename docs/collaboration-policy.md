@@ -10,6 +10,8 @@ Developers must not access production personal data unless there is a documented
 
 Use synthetic test data for development.
 
+The preview Supabase project is owned by a trusted collaborator and must be treated as non-production. Do not copy production records, real photos, real cedulas, or audit exports into preview.
+
 ## Security Expectations
 
 Contributors must:
@@ -28,6 +30,8 @@ Contributors must:
 Pull requests into `main` are checked by GitHub Actions. The current workflow validates the expected release version from tags using `.github/workflows/validate-tag.yml`.
 
 The repository uses `.github/CODEOWNERS` for ownership review. Changes to privacy, Supabase schema, audit logging, RLS, storage policy, legal text, or deployment configuration should be reviewed by a code owner before merging.
+
+Normal changes should flow through `feature/* -> preview -> main`. Pull requests into `preview` validate lint/build and should be tested against the preview Supabase project with synthetic data. Pull requests into `main` require production release review and VERSION validation.
 
 ## AI Assistant Rules
 

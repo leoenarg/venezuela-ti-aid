@@ -74,6 +74,7 @@ La auditoria guarda IP aproximada y `ip_hash`, headers tecnicos minimos, ruta, m
 - `docs/privacy-and-data-protection.md` define reglas de tratamiento de datos.
 - `docs/terms-and-conditions.md` contiene una base de terminos de uso.
 - `docs/collaboration-policy.md` define reglas para colaboradores y uso de IA.
+- `docs/environments.md` define ramas, Supabase production/preview, Vercel y rulesets.
 - `docs/service-provider-risk-review.md` resume riesgos y links de Vercel, Supabase y GitHub.
 - `.github/CODEOWNERS` define revisores responsables para cambios del repositorio.
 - `.github/workflows/validate-tag.yml` valida en pull requests hacia `main` que la version esperada sea consecutiva segun el ultimo tag `v.Numero.YYMMDDletra`.

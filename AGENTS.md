@@ -9,6 +9,7 @@ Required context before touching data flows:
 - `brain.md`
 - `docs/privacy-and-data-protection.md`
 - `docs/collaboration-policy.md`
+- `docs/environments.md`
 - `supabase/schema.sql`
 - `supabase/audit.sql`
 
