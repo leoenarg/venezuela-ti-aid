@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
 import { SearchResult } from "@/lib/supabaseClient";
+import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 
 const statusLabels: Record<string, string> = {
   missing: "Persona perdida",
@@ -11,15 +13,26 @@ const statusLabels: Record<string, string> = {
   critical_health: "Salud delicada"
 };
 
+type SearchFormValues = {
+  cedula: string;
+  birthDate: string;
+};
+
 export default function SearchPage() {
-  const [cedula, setCedula] = useState("");
-  const [birthDate, setBirthDate] = useState("");
+  const {
+    register,
+    handleSubmit,
+    formState: { errors }
+  } = useForm<SearchFormValues>({
+    defaultValues: { cedula: "", birthDate: "" }
+  });
   const [result, setResult] = useState<SearchResult | null>(null);
   const [message, setMessage] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
-  async function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const cedulaField = register("cedula", cedulaRules);
+
+  async function search(values: SearchFormValues) {
     setResult(null);
     setMessage("");
     setIsSearching(true);
@@ -31,8 +44,8 @@ export default function SearchPage() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          cedula: cedula.trim(),
-          birthDate
+          cedula: values.cedula.trim(),
+          birthDate: values.birthDate
         })
       });
 
@@ -69,20 +82,28 @@ export default function SearchPage() {
           navegador, accion realizada y si hubo coincidencia exacta.
         </p>
 
-        <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={search}>
+        <form className="mt-6 grid gap-4 rounded-md border border-neutral-300 bg-white p-4" onSubmit={handleSubmit(search)} noValidate>
           <label className="grid gap-2 font-bold">
             Cedula de Identidad
-            <input className="focus-ring rounded-md border border-neutral-400 px-3 py-3" onChange={(event) => setCedula(event.target.value)} required value={cedula} />
+            <input
+              className="focus-ring rounded-md border border-neutral-400 px-3 py-3"
+              inputMode="numeric"
+              {...cedulaField}
+              onChange={(event) => {
+                event.target.value = sanitizeCedula(event.target.value);
+                cedulaField.onChange(event);
+              }}
+            />
+            {errors.cedula ? <span className="text-sm font-semibold text-alert">{errors.cedula.message}</span> : null}
           </label>
           <label className="grid gap-2 font-bold">
             Fecha de nacimiento
             <input
               className="focus-ring rounded-md border border-neutral-400 px-3 py-3"
-              onChange={(event) => setBirthDate(event.target.value)}
-              required
               type="date"
-              value={birthDate}
+              {...register("birthDate", { required: "La fecha de nacimiento es obligatoria." })}
             />
+            {errors.birthDate ? <span className="text-sm font-semibold text-alert">{errors.birthDate.message}</span> : null}
           </label>
           <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white" disabled={isSearching} type="submit">
             {isSearching ? "Buscando..." : "Buscar"}

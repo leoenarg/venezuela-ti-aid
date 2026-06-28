@@ -2,42 +2,87 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
+import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
 
 type Step = 1 | 2 | 3;
 
+type ReportFormValues = {
+  fullName: string;
+  cedula: string;
+  gender: string;
+  age: string;
+  birthDate: string;
+  status: LifeStatus;
+  locationCategory: string;
+  locationDetail: string;
+  lastKnownState: string;
+  lastKnownCity: string;
+  lastKnownParish: string;
+  acceptedTerms: boolean;
+};
+
+const stepFields: Record<Exclude<Step, 3>, (keyof ReportFormValues)[]> = {
+  1: ["fullName", "cedula", "gender"],
+  2: ["age", "birthDate"]
+};
+
 export default function ReportPage() {
+  const {
+    register,
+    handleSubmit,
+    watch,
+    trigger,
+    reset,
+    formState: { errors }
+  } = useForm<ReportFormValues>({
+    defaultValues: {
+      fullName: "",
+      cedula: "",
+      gender: "",
+      age: "",
+      birthDate: "",
+      status: "missing",
+      locationCategory: locationOptions[0],
+      locationDetail: "",
+      lastKnownState: "",
+      lastKnownCity: "",
+      lastKnownParish: "",
+      acceptedTerms: false
+    }
+  });
+
   const [step, setStep] = useState<Step>(1);
-  const [fullName, setFullName] = useState("");
-  const [cedula, setCedula] = useState("");
-  const [gender, setGender] = useState("");
-  const [age, setAge] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [status, setStatus] = useState<LifeStatus>("missing");
-  const [locationCategory, setLocationCategory] = useState(locationOptions[0]);
-  const [locationDetail, setLocationDetail] = useState("");
-  const [lastKnownState, setLastKnownState] = useState("");
-  const [lastKnownCity, setLastKnownCity] = useState("");
-  const [lastKnownParish, setLastKnownParish] = useState("");
   const [optimizedPhoto, setOptimizedPhoto] = useState<File | null>(null);
   const [photoValidation, setPhotoValidation] = useState<ImageValidationResult | null>(null);
   const [photoStatus, setPhotoStatus] = useState<"idle" | "validating" | "error" | "success">("idle");
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const age = watch("age");
+  const status = watch("status");
+  const locationCategory = watch("locationCategory");
+  const acceptedTerms = watch("acceptedTerms");
+
+  const cedulaField = register("cedula", cedulaRules);
 
   const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
   const isPhotoBusy = photoStatus === "validating";
   const hasPhotoError = photoStatus === "error";
-  const canContinue =
-    (step === 1 && fullName.trim().length > 1 && cedula.trim().length > 3 && gender.length > 0) ||
-    (step === 2 && Number(age) >= 0 && birthDate.length > 0 && !isPhotoBusy && !hasPhotoError) ||
-    step === 3;
+
+  async function goToNextStep() {
+    if (step === 3) return;
+    const valid = await trigger(stepFields[step]);
+    if (!valid) return;
+    if (step === 2 && (isPhotoBusy || hasPhotoError)) return;
+    setStep((step + 1) as Step);
+  }
 
   useEffect(() => {
     return () => {
@@ -91,8 +136,7 @@ export default function ReportPage() {
     setPhotoStatus("success");
   }
 
-  async function submitReport(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitReport(values: ReportFormValues) {
     setMessage("");
     setIsSubmitting(true);
 
@@ -147,20 +191,21 @@ export default function ReportPage() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          full_name: fullName.trim(),
-          cedula: cedula.trim(),
-          gender,
-          age: Number(age),
-          birth_date: birthDate,
-          status,
-          location_category: locationCategory,
-          location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
-          last_known_state: lastKnownState || null,
-          last_known_city: lastKnownCity.trim() || null,
-          last_known_parish: lastKnownParish.trim() || null,
+          full_name: values.fullName.trim(),
+          cedula: values.cedula.trim(),
+          gender: values.gender,
+          age: Number(values.age),
+          birth_date: values.birthDate,
+          status: values.status,
+          location_category: values.locationCategory,
+          location_detail:
+            values.locationCategory === "Otro..." ? values.locationDetail.trim() : values.locationDetail.trim() || null,
+          last_known_state: values.lastKnownState || null,
+          last_known_city: values.lastKnownCity.trim() || null,
+          last_known_parish: values.lastKnownParish.trim() || null,
           image_url: imageUrl,
           is_minor: isMinor,
-          accepted_terms: acceptedTerms,
+          accepted_terms: values.acceptedTerms,
           terms_version: "2026-06-27",
           audit_metadata: optimizedPhoto
             ? {
@@ -176,24 +221,13 @@ export default function ReportPage() {
       if (!response.ok) throw new Error("Report API failed.");
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
-      setFullName("");
-      setCedula("");
-      setGender("");
-      setAge("");
-      setBirthDate("");
-      setStatus("missing");
-      setLocationCategory(locationOptions[0]);
-      setLocationDetail("");
-      setLastKnownState("");
-      setLastKnownCity("");
-      setLastKnownParish("");
+      reset();
       if (photoValidation?.previewUrl) {
         URL.revokeObjectURL(photoValidation.previewUrl);
       }
       setOptimizedPhoto(null);
       setPhotoValidation(null);
       setPhotoStatus("idle");
-      setAcceptedTerms(false);
       setStep(1);
     } catch {
       setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
@@ -218,23 +252,47 @@ export default function ReportPage() {
         </p>
         <AuditNotice />
 
-        <form className="mt-6 grid gap-5" onSubmit={submitReport}>
+        <form className="mt-6 grid gap-5" onSubmit={handleSubmit(submitReport)} noValidate>
           {step === 1 ? (
             <section className="grid gap-4">
-              <TextField label="Nombre completo" onChange={setFullName} required value={fullName} />
-              <TextField label="Cedula de Identidad" onChange={setCedula} required value={cedula} />
+              <TextField
+                label="Nombre completo"
+                registration={register("fullName", {
+                  required: "El nombre completo es obligatorio.",
+                  minLength: { value: 2, message: "Ingresa el nombre completo." }
+                })}
+                error={errors.fullName?.message}
+                required
+              />
+              <TextField
+                label="Cedula de Identidad"
+                inputMode="numeric"
+                registration={{
+                  ...cedulaField,
+                  onChange: (event) => {
+                    event.target.value = sanitizeCedula(event.target.value);
+                    return cedulaField.onChange(event);
+                  }
+                }}
+                error={errors.cedula?.message}
+                required
+              />
               <label className="grid gap-2 font-bold">
                 Genero
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setGender(event.target.value)} required value={gender}>
+                <select
+                  className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
+                  {...register("gender", { required: "Selecciona el genero." })}
+                >
                   <option value="">Seleccionar</option>
                   <option value="femenino">Femenino</option>
                   <option value="masculino">Masculino</option>
                   <option value="otro">Otro / no especificado</option>
                 </select>
+                {errors.gender ? <span className="text-sm font-semibold text-alert">{errors.gender.message}</span> : null}
               </label>
               <label className="grid gap-2 font-bold">
                 Estado de vida
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setStatus(event.target.value as LifeStatus)} value={status}>
+                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" {...register("status")}>
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
@@ -247,8 +305,24 @@ export default function ReportPage() {
 
           {step === 2 ? (
             <section className="grid gap-4">
-              <TextField label="Edad" min="0" onChange={setAge} required type="number" value={age} />
-              <TextField label="Fecha de nacimiento" onChange={setBirthDate} required type="date" value={birthDate} />
+              <TextField
+                label="Edad"
+                min="0"
+                type="number"
+                registration={register("age", {
+                  required: "La edad es obligatoria.",
+                  min: { value: 0, message: "La edad no puede ser negativa." }
+                })}
+                error={errors.age?.message}
+                required
+              />
+              <TextField
+                label="Fecha de nacimiento"
+                type="date"
+                registration={register("birthDate", { required: "La fecha de nacimiento es obligatoria." })}
+                error={errors.birthDate?.message}
+                required
+              />
               {isMinor ? <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">El reporte sera marcado como menor de edad.</p> : null}
               <label className="grid gap-2 font-bold">
                 Foto opcional
@@ -275,9 +349,7 @@ export default function ReportPage() {
                 Ubicacion o institucion
                 <select
                   className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
-                  onChange={(event) => setLocationCategory(event.target.value)}
-                  required
-                  value={locationCategory}
+                  {...register("locationCategory")}
                 >
                   {locationOptions.map((option) => (
                     <option key={option} value={option}>
@@ -290,15 +362,19 @@ export default function ReportPage() {
                 Detalle de ubicacion
                 <textarea
                   className="focus-ring min-h-24 rounded-md border border-neutral-400 bg-white px-3 py-3"
-                  onChange={(event) => setLocationDetail(event.target.value)}
                   placeholder={locationCategory === "Otro..." ? "Escribe el lugar conocido" : "Nombre del centro, ciudad o referencia"}
-                  required={locationCategory === "Otro..."}
-                  value={locationDetail}
+                  {...register("locationDetail", {
+                    validate: (value) =>
+                      locationCategory !== "Otro..." || value.trim().length > 0 || "Describe el lugar conocido."
+                  })}
                 />
+                {errors.locationDetail ? (
+                  <span className="text-sm font-semibold text-alert">{errors.locationDetail.message}</span>
+                ) : null}
               </label>
               <label className="grid gap-2 font-bold">
                 Estado donde fue extraviada o ultimo lugar conocido
-                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" onChange={(event) => setLastKnownState(event.target.value)} value={lastKnownState}>
+                <select className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3" {...register("lastKnownState")}>
                   <option value="">No especificado</option>
                   {stateOptions.map((state) => (
                     <option key={state} value={state}>
@@ -307,15 +383,13 @@ export default function ReportPage() {
                   ))}
                 </select>
               </label>
-              <TextField label="Ciudad opcional" onChange={setLastKnownCity} value={lastKnownCity} />
-              <TextField label="Parroquia opcional" onChange={setLastKnownParish} value={lastKnownParish} />
+              <TextField label="Ciudad opcional" registration={register("lastKnownCity")} />
+              <TextField label="Parroquia opcional" registration={register("lastKnownParish")} />
               <label className="flex gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6">
                 <input
-                  checked={acceptedTerms}
                   className="mt-1 h-5 w-5"
-                  onChange={(event) => setAcceptedTerms(event.target.checked)}
-                  required
                   type="checkbox"
+                  {...register("acceptedTerms", { required: true })}
                 />
                 <span>
                   Confirmo que envio esta informacion de buena fe para fines humanitarios y acepto los{" "}
@@ -335,7 +409,7 @@ export default function ReportPage() {
               </button>
             ) : null}
             {step < 3 ? (
-              <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" disabled={!canContinue} onClick={() => setStep((step + 1) as Step)} type="button">
+              <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" disabled={isPhotoBusy || hasPhotoError} onClick={goToNextStep} type="button">
                 {isPhotoBusy ? "Validando foto..." : "Continuar"}
               </button>
             ) : (
@@ -443,18 +517,20 @@ async function sha256File(file: File) {
 
 function TextField({
   label,
-  onChange,
-  value,
+  registration,
   type = "text",
   required = false,
-  min
+  min,
+  inputMode,
+  error
 }: {
   label: string;
-  onChange: (value: string) => void;
-  value: string;
+  registration: UseFormRegisterReturn;
   type?: string;
   required?: boolean;
   min?: string;
+  inputMode?: "numeric" | "text";
+  error?: string;
 }) {
   return (
     <label className="grid gap-2 font-bold">
@@ -462,11 +538,12 @@ function TextField({
       <input
         className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
         min={min}
-        onChange={(event) => onChange(event.target.value)}
+        inputMode={inputMode}
         required={required}
         type={type}
-        value={value}
+        {...registration}
       />
+      {error ? <span className="text-sm font-semibold text-alert">{error}</span> : null}
     </label>
   );
 }
