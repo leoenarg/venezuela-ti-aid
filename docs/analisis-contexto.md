@@ -53,12 +53,8 @@ Tabla única: **`public.missing_persons`**. Campos sensibles clave:
 
 Restricciones notables en el esquema:
 - `status` es enum `person_status` (`missing`, `found_alive`, `deceased`, `critical_health`).
-- `age` y `birth_date` son **nullable**: en emergencias puede conocerse solo la edad,
-  solo la fecha (de la que se deriva la edad), o ninguno. `is_minor = (age < 18)` se valida
-  cuando `age` no es null (check `age is null or is_minor = (age < 18)`) en *check constraint*
-  **y** en la política RLS de inserción; con `age` null, `is_minor` se fija en `false`.
-- Identidad única: `unique (cedula, birth_date)`. Con `birth_date` null los registros son
-  distintos (NULLs no colisionan) y **no aparecen** en la búsqueda exacta hasta conocerse la fecha.
+- `is_minor = (age < 18)` se valida en *check constraint* **y** en la política RLS de inserción.
+- Identidad única: `unique (cedula, birth_date)` — base de la búsqueda exacta.
 - `terms_version` se guarda en el reporte (actualmente fijo `"2026-06-27"` en el cliente).
 - Trigger `set_missing_persons_updated_at` mantiene `updated_at`.
 

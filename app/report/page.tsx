@@ -14,18 +14,11 @@ const inputClass = "focus-ring rounded-md border border-neutral-400 bg-white px-
 
 type Step = 1 | 2 | 3;
 
-// How much the reporter knows about the person's age:
-// - birthDate: exact birth date known -> age is derived automatically.
-// - ageOnly: only the age is known -> birth_date stays empty (null on submit).
-// - unknown: neither is known -> the flow must not be blocked.
-type AgeMode = "birthDate" | "ageOnly" | "unknown";
-
 type ReportForm = {
   fullName: string;
   cedula: string;
   gender: string;
   status: LifeStatus;
-  ageMode: AgeMode;
   birthDate: string;
   age: string;
   locationCategory: string;
@@ -34,12 +27,6 @@ type ReportForm = {
   lastKnownCity: string;
   lastKnownParish: string;
   acceptedTerms: boolean;
-};
-
-const ageModeLabels: Record<AgeMode, string> = {
-  birthDate: "Conozco la fecha de nacimiento",
-  ageOnly: "Solo conozco la edad",
-  unknown: "No conozco ninguno de los dos"
 };
 
 export default function ReportPage() {
@@ -55,7 +42,6 @@ export default function ReportPage() {
     watch,
     setValue,
     trigger,
-    clearErrors,
     reset,
     formState: { errors, isSubmitting }
   } = useForm<ReportForm>({
@@ -65,7 +51,6 @@ export default function ReportPage() {
       cedula: "",
       gender: "",
       status: "missing",
-      ageMode: "birthDate",
       birthDate: "",
       age: "",
       locationCategory: locationOptions[0],
@@ -77,8 +62,6 @@ export default function ReportPage() {
     }
   });
 
-  const ageMode = watch("ageMode");
-  const birthDate = watch("birthDate");
   const ageInput = watch("age");
   const locationCategory = watch("locationCategory");
   const status = watch("status");
@@ -87,11 +70,10 @@ export default function ReportPage() {
   const isPhotoBusy = photoStatus === "validating";
   const hasPhotoError = photoStatus === "error";
 
-  const derivedAge = ageMode === "birthDate" ? calculateAge(birthDate) : null;
-  const effectiveAge = ageMode === "birthDate" ? derivedAge : ageMode === "ageOnly" ? Number(ageInput) : null;
-  const isMinor = effectiveAge != null && effectiveAge >= 0 ? effectiveAge < 18 : false;
+  const isMinor = Number(ageInput) > 0 && Number(ageInput) < 18;
 
   const cedulaField = register("cedula", cedulaRules);
+  const birthDateField = register("birthDate", { required: "Indica la fecha de nacimiento." });
 
   useEffect(() => {
     return () => {
@@ -101,18 +83,18 @@ export default function ReportPage() {
     };
   }, [photoValidation?.previewUrl]);
 
-  function selectAgeMode(mode: AgeMode) {
-    setValue("ageMode", mode);
-    // Drop values that no longer apply so stale data is never submitted.
-    if (mode !== "birthDate") setValue("birthDate", "");
-    if (mode !== "ageOnly") setValue("age", "");
-    clearErrors(["birthDate", "age"]);
+  // When a birth date is entered we auto-fill the age field; the user can still
+  // edit it afterwards.
+  function handleBirthDateChange(event: ChangeEvent<HTMLInputElement>) {
+    birthDateField.onChange(event);
+    const computed = calculateAge(event.target.value);
+    setValue("age", computed != null ? String(computed) : "", { shouldValidate: true });
   }
 
   async function goNext() {
     const fieldsByStep: Record<number, (keyof ReportForm)[]> = {
       1: ["fullName", "cedula", "gender"],
-      2: ageMode === "birthDate" ? ["birthDate"] : ageMode === "ageOnly" ? ["age"] : []
+      2: ["birthDate", "age"]
     };
     const valid = await trigger(fieldsByStep[step] ?? []);
     // Step 2 also waits for image validation to settle before advancing.
@@ -176,14 +158,8 @@ export default function ReportPage() {
         throw new Error("Photo validation is not complete.");
       }
 
-      const birthDateValue = data.ageMode === "birthDate" ? data.birthDate : null;
-      const ageValue =
-        data.ageMode === "birthDate"
-          ? calculateAge(data.birthDate)
-          : data.ageMode === "ageOnly"
-            ? Number(data.age)
-            : null;
-      const minor = ageValue != null ? ageValue < 18 : false;
+      const ageValue = Number(data.age);
+      const minor = ageValue < 18;
 
       let imageUrl: string | null = null;
 
@@ -231,7 +207,7 @@ export default function ReportPage() {
           cedula: data.cedula.trim(),
           gender: data.gender,
           age: ageValue,
-          birth_date: birthDateValue,
+          birth_date: data.birthDate,
           status: data.status,
           location_category: data.locationCategory,
           location_detail:
@@ -331,71 +307,37 @@ export default function ReportPage() {
 
           {step === 2 ? (
             <section className="grid gap-4">
-              <fieldset className="grid gap-2">
-                <legend className="font-bold">Datos de edad</legend>
-                <p className="text-sm font-semibold text-neutral-600">Elige la opcion que mejor describa lo que conoces.</p>
-                <div className="grid gap-2">
-                  {(Object.keys(ageModeLabels) as AgeMode[]).map((mode) => (
-                    <label
-                      key={mode}
-                      className="flex items-center gap-3 rounded-md border border-neutral-300 bg-white p-3 font-semibold"
-                    >
-                      <input
-                        checked={ageMode === mode}
-                        className="h-5 w-5"
-                        onChange={() => selectAgeMode(mode)}
-                        type="checkbox"
-                      />
-                      <span>{ageModeLabels[mode]}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <Field error={errors.birthDate?.message} label="Fecha de nacimiento">
+                <input
+                  className={inputClass}
+                  type="date"
+                  {...birthDateField}
+                  onChange={handleBirthDateChange}
+                />
+              </Field>
 
-              {ageMode === "birthDate" ? (
-                <Field error={errors.birthDate?.message} label="Fecha de nacimiento">
-                  <input
-                    className={inputClass}
-                    type="date"
-                    {...register("birthDate", {
-                      validate: (value) =>
-                        ageMode !== "birthDate" || (!!value && calculateAge(value) != null) || "Indica una fecha de nacimiento valida."
-                    })}
-                  />
-                  {derivedAge != null ? (
-                    <span className="text-sm font-bold text-neutral-700">Edad calculada: {derivedAge} años</span>
-                  ) : null}
-                </Field>
-              ) : null}
-
-              {ageMode === "ageOnly" ? (
-                <Field error={errors.age?.message} label="Edad">
-                  <input
-                    className={inputClass}
-                    inputMode="numeric"
-                    min="0"
-                    max="125"
-                    type="number"
-                    {...register("age", {
-                      validate: (value) => {
-                        if (ageMode !== "ageOnly") return true;
-                        if (!value) return "Indica la edad.";
-                        const numeric = Number(value);
-                        if (!Number.isInteger(numeric) || numeric < 0 || numeric > 125) {
-                          return "Ingresa una edad entre 0 y 125.";
-                        }
-                        return true;
+              <Field error={errors.age?.message} label="Edad">
+                <input
+                  className={inputClass}
+                  inputMode="numeric"
+                  min="0"
+                  max="125"
+                  type="number"
+                  {...register("age", {
+                    required: "Indica la edad.",
+                    validate: (value) => {
+                      const numeric = Number(value);
+                      if (value === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 125) {
+                        return "Ingresa una edad entre 0 y 125.";
                       }
-                    })}
-                  />
-                </Field>
-              ) : null}
-
-              {ageMode === "unknown" ? (
-                <p className="rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold text-neutral-700">
-                  Puedes continuar sin estos datos. El reporte no podra encontrarse por busqueda exacta hasta que se conozca la fecha de nacimiento.
-                </p>
-              ) : null}
+                      return true;
+                    }
+                  })}
+                />
+                <span className="text-sm font-semibold text-neutral-600">
+                  Se calcula automaticamente al indicar la fecha de nacimiento; puedes ajustarla.
+                </span>
+              </Field>
 
               {isMinor ? (
                 <p className="rounded-md border border-alert bg-red-50 p-3 text-sm font-bold text-alert">

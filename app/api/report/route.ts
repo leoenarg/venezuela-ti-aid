@@ -6,8 +6,8 @@ type ReportRequestBody = {
   full_name?: string;
   cedula?: string;
   gender?: string;
-  age?: number | null;
-  birth_date?: string | null;
+  age?: number;
+  birth_date?: string;
   status?: string;
   location_category?: string;
   location_detail?: string | null;
@@ -39,14 +39,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ReportRequestBody;
 
-    // age and birth_date are optional (emergencies may only yield one or neither),
-    // but when age is provided it must be a valid number.
-    if (
-      !body.accepted_terms ||
-      !body.cedula ||
-      !body.full_name ||
-      (body.age != null && typeof body.age !== "number")
-    ) {
+    if (!body.accepted_terms || !body.cedula || !body.birth_date || !body.full_name || typeof body.age !== "number") {
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
@@ -64,8 +57,8 @@ export async function POST(request: Request) {
         full_name: body.full_name.trim(),
         cedula: body.cedula.trim(),
         gender: body.gender,
-        age: body.age ?? null,
-        birth_date: body.birth_date ?? null,
+        age: body.age,
+        birth_date: body.birth_date,
         status: body.status,
         location_category: body.location_category,
         location_detail: body.location_detail,
@@ -89,7 +82,7 @@ export async function POST(request: Request) {
         metadata: {
           error: error.code,
           cedula_hash: hashAuditValue(body.cedula.trim()),
-          birth_date_hash: body.birth_date ? hashAuditValue(body.birth_date) : null
+          birth_date_hash: hashAuditValue(body.birth_date)
         }
       });
 
@@ -109,7 +102,7 @@ export async function POST(request: Request) {
         last_known_state: data.last_known_state,
         has_image: Boolean(body.image_url),
         cedula_hash: hashAuditValue(body.cedula.trim()),
-        birth_date_hash: body.birth_date ? hashAuditValue(body.birth_date) : null,
+        birth_date_hash: hashAuditValue(body.birth_date),
         image: body.audit_metadata ?? null
       }
     });
