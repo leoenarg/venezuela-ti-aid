@@ -8,6 +8,13 @@ export function sanitizeCedula(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+export function sanitizeFullName(value: string): string {
+  return Array.from(value)
+    .filter((character) => /[\p{L}\p{M} '\u2019.-]/u.test(character))
+    .join("")
+    .replace(/\s{2,}/g, " ");
+}
+
 /**
  * Calculates a whole-year age from an ISO birth date string (yyyy-mm-dd).
  * Returns "" when the date is empty, invalid, or in the future, so the

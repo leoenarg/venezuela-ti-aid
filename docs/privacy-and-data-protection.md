@@ -14,13 +14,14 @@ The application may collect:
 - Cedula or identity number.
 - Date of birth.
 - Age and gender.
-- Life status: missing, found alive, deceased, or critical health.
+- Life status: extraviada/missing, found alive, deceased, or under medical supervision.
 - Location or institution category.
 - Optional location detail.
 - Optional last-known state, city, and parish.
 - Optional validated and optimized photo.
 - Whether the person is a minor.
 - Consent acknowledgement and terms version.
+- Official legal request intake data when a competent authority submits a court-order request.
 - Defensive technical audit records for abuse prevention, including timestamp, approximate IP or IP hash, user-agent, request path, action type, status, and minimized metadata.
 
 ## Sensitive Data Rules
@@ -40,6 +41,12 @@ When `age < 18`, `is_minor` must be true.
 
 Search results for minors must be masked or structurally reduced. The current schema masks name, location detail, city, parish, and image URL in the exact-match RPC.
 
+Photos of minors must not be shown in the public exact-match result. If a family member or legal guardian needs visual confirmation, the recommended flow is assisted verification: exact identity data first, then an authorized operator reviews the image privately and only confirms or rejects the match. Do not add automated face matching or public photo reveal for minors without legal and humanitarian review.
+
+## Input Validation
+
+The report form should help users enter clean data without being hostile. `full_name` is filtered and validated to allow normal name characters: Unicode letters, accents, `ñ`, dieresis, apostrophe, period, hyphen, and spaces. Numbers and unrelated symbols are rejected. The same rule must exist client-side and server-side.
+
 ## Search
 
 Public search must use exact `cedula` + `birth_date`. A failed search must return a generic message and must not reveal whether either value exists.
@@ -49,6 +56,19 @@ Public search must use exact `cedula` + `birth_date`. A failed search must retur
 The project may keep append-only audit records for loads, searches, result views, downloads, and administrative decisions. The purpose is forensic integrity, abuse prevention, and lawful response to competent authorities.
 
 Audit metadata must be minimized. When identity values are useful for investigation, store salted hashes instead of raw cedula or birth date whenever possible. Audit failures should not block humanitarian reporting or searching unless a future sensitive download route explicitly requires audit success.
+
+## Legal Authority Requests
+
+The `/legal/request` portal is an intake channel for competent authorities with a valid court order or equivalent legally binding order. It does not provide automatic access, public links, or direct downloads.
+
+Any legal disclosure must be:
+
+- Reviewed by an authorized project operator or qualified legal reviewer.
+- Limited to the exact scope of the order.
+- Minimized to the necessary fields.
+- Heightened-review when minors or photos are involved.
+- Logged in defensive audit records.
+- Delivered through a secure, non-public channel.
 
 ## Infrastructure Providers
 
@@ -70,6 +90,12 @@ These services may process data as infrastructure providers under their own poli
 Do not tell users that no third party can ever process their data. Say that the project limits access and uses infrastructure providers required to operate the service.
 
 ## Retention
+
+Operational contact for correction, deletion, takedown, abuse reports, false reports, general information, collaboration, or donation-related questions:
+
+```text
+venezuelatiaid@gmail.com
+```
 
 Before production, define:
 

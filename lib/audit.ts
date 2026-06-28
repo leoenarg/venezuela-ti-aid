@@ -16,6 +16,10 @@ export type AuditEventType =
   | "DOWNLOAD_REPORT"
   | "ADMIN_REVIEW_APPROVED"
   | "ADMIN_REVIEW_REJECTED"
+  | "LEGAL_DATA_REQUEST_SUBMITTED"
+  | "LEGAL_DATA_REQUEST_REJECTED"
+  | "LEGAL_EXPORT_CREATED"
+  | "LEGAL_EXPORT_DENIED"
   | "AUDIT_EXPORT";
 
 type AuditMetadata = Record<string, unknown>;

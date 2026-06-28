@@ -2,7 +2,7 @@
 
 ## Mission
 
-venezuela-ti-aid is a humanitarian, privacy-first web app for Venezuela. Its only acceptable purpose is helping families report and search for missing, found, deceased, or medically vulnerable people during emergencies.
+venezuela-ti-aid is a humanitarian, privacy-first web app for Venezuela. Its only acceptable purpose is helping families report and search for extraviada/missing, found, deceased, or medically supervised/vulnerable people during emergencies.
 
 This project handles sensitive personal data. Treat every change as safety-critical.
 
@@ -11,7 +11,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Do not create public directories, public name search, feeds, maps of individuals, exports, or bulk listing features.
 - Public search must require exact identity keys: `cedula` + `birth_date`.
 - Never expose raw records through anonymous `SELECT`.
-- Protect minors by masking or withholding extra details.
+- Protect minors by masking or withholding extra details, including photos. Visual confirmation for minors must be assisted by an authorized human operator in a private channel.
 - Collect the least data needed for family reunification and humanitarian assistance.
 - Do not add analytics, trackers, ads, heatmaps, session replay, marketing pixels, or AI enrichment APIs.
 - Do not send user-submitted data to third-party AI services.
@@ -36,9 +36,11 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - `/report` multi-step report form.
 - `/search` exact-match private search.
 - `/legal` public terms, privacy, collaboration, and provider notice.
+- `/legal/request` legal authority request intake. It only records requests; it must not deliver automatic downloads.
 - `/api/report` server-side report creation and audit logging.
 - `/api/search` server-side exact search and audit logging.
 - `/api/audit` limited client-triggered audit endpoint for image upload validation events.
+- `/api/legal-request` server-side legal request intake and audit logging.
 
 ## Data Model Notes
 
@@ -68,6 +70,17 @@ The public app uses RPC functions:
 
 Anonymous direct reads are intentionally denied by RLS.
 
+Restricted legal request records live in `legal.data_requests` from `supabase/legal-requests.sql`. This table is for request intake only. It is not an export table and must not be readable by anonymous or authenticated clients.
+
+Important RLS implementation detail: `/api/report` must insert without chaining `.select()` or `.single()` after the insert. Anonymous direct reads are denied, so a post-insert select can fail even when the insert policy is valid. Generate the report UUID server-side before insert when the client needs an id.
+
+Public labels currently shown to users:
+
+- `missing`: Extraviada / Personas extraviadas.
+- `found_alive`: Encontradas / Encontrada con vida.
+- `deceased`: Fallecidas / Fallecida.
+- `critical_health`: Bajo supervision medica.
+
 ## Static Reference Content Notes
 
 The home page shows a free veterinary care directory via `components/VetClinicsDirectory.tsx`. This is static, hardcoded, public emergency-aid reference data (clinic names, public phone numbers, locations). It is NOT a directory of individuals or missing persons, has no database, RPC, audit, or tracking, and therefore does not conflict with the "no public directories" privacy principle, which protects personal records of reported people. Keep this content static and free-tier friendly; do not turn it into a database-backed, user-submitted, or scraped listing without a privacy review.
@@ -78,9 +91,10 @@ The home page shows a free veterinary care directory via `components/VetClinicsD
 2. Read `supabase/schema.sql` before changing database behavior.
 3. Read `supabase/audit.sql` before changing audit behavior.
 4. Read `docs/environments.md` before changing deployment, branch, or environment behavior.
-5. Check `.github/workflows/validate-tag.yml` before changing release/tag behavior.
-6. Run `npm run lint` and `npm run build`.
-7. If adding a field, update:
+5. Read `docs/legal-data-requests.md` before changing legal request, export, authority, or court-order behavior.
+6. Check `.github/workflows/validate-tag.yml` before changing release/tag behavior.
+7. Run `npm run lint` and `npm run build`.
+8. If adding a field, update:
    - Supabase schema
    - report form
    - search result masking
@@ -93,13 +107,21 @@ The `/report` form calls `validateAndOptimizeImage(file)` when the user selects 
 
 Supabase Storage bucket `person-photos` must accept optimized `image/jpeg` and `image/webp` files. Keep file names random and avoid predictable paths.
 
+## Report Form Validation Notes
+
+`full_name` is filtered while typing and validated again in `/api/report`. The allowed character set is intentionally narrow but human-friendly: Unicode letters and marks, spaces, apostrophe, right apostrophe, period, and hyphen. It is meant to support common Spanish names plus many English or Arabic transliterations while rejecting numbers and unrelated symbols.
+
+Each visible report/search field should include short helper text explaining the meaning and expected format. Keep the copy plain Spanish and mobile-friendly.
+
 ## Audit Notes
 
 Audit is defensive, append-only, and server-side. Required server-only environment variables are `SUPABASE_SERVICE_ROLE_KEY` and `AUDIT_SALT`. Never expose them through `NEXT_PUBLIC_*`. Public report/search flows must not depend on service role; they should use anon/RLS and let audit logging fail safely if service credentials are unavailable.
 
 Integrated events: `UPLOAD_IMAGE_ATTEMPT`, `UPLOAD_IMAGE_SUCCESS`, `UPLOAD_IMAGE_REJECTED`, `CREATE_PERSON_REPORT`, `SEARCH_PERSON`, and `VIEW_PERSON_DETAIL`.
 
-Prepared but not yet integrated because no matching flow exists: `UPDATE_PERSON_REPORT`, `DOWNLOAD_IMAGE`, `DOWNLOAD_REPORT`, `ADMIN_REVIEW_APPROVED`, `ADMIN_REVIEW_REJECTED`, and `AUDIT_EXPORT`.
+Integrated legal intake event: `LEGAL_DATA_REQUEST_SUBMITTED`. Rejections use `LEGAL_DATA_REQUEST_REJECTED`.
+
+Prepared but not yet integrated because no matching delivery flow exists: `UPDATE_PERSON_REPORT`, `DOWNLOAD_IMAGE`, `DOWNLOAD_REPORT`, `ADMIN_REVIEW_APPROVED`, `ADMIN_REVIEW_REJECTED`, `LEGAL_EXPORT_CREATED`, `LEGAL_EXPORT_DENIED`, and `AUDIT_EXPORT`.
 
 Do not store raw cedula or birth date in audit metadata. Use salted hashes via `hashAuditValue`.
 
@@ -115,6 +137,7 @@ Deployment is controlled by GitHub Actions. Pull requests validate only; pushes 
 
 - Changing RLS policies to allow anonymous `SELECT`.
 - Adding admin dashboards that expose personal data.
+- Adding automatic legal downloads, public export links, or unauthenticated delivery URLs.
 - Making images publicly browseable by predictable names.
 - Storing precise GPS coordinates.
 - Adding automated facial recognition, biometric matching, AI identification, or inference.
@@ -138,6 +161,10 @@ Current references:
 - Supabase Privacy Policy: https://supabase.com/privacy
 - Supabase Terms: https://supabase.com/terms
 - Supabase DPA: https://supabase.com/dpa
+
+## Operational Contact
+
+Use `venezuelatiaid@gmail.com` as the public operational contact for general information, abuse reports, correction/removal requests, false-report complaints, collaboration, and donation-related questions. Donations or future support must never grant access to personal data, reports, photos, audit exports, or private system capabilities.
 
 ## Tone and UX
 

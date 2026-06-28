@@ -7,7 +7,7 @@ import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
-import { calculateAge, cedulaRules, fullNameRules, sanitizeCedula } from "@/lib/formHelpers";
+import { calculateAge, cedulaRules, fullNameRules, sanitizeCedula, sanitizeFullName } from "@/lib/formHelpers";
 
 const locationOptions = ["Hospital", "Sede Policial", "Refugio Temporal", "Escuela Habilitada", "Otro..."];
 
@@ -72,6 +72,7 @@ export default function ReportPage() {
   const acceptedTerms = watch("acceptedTerms");
 
   const cedulaField = register("cedula", cedulaRules);
+  const fullNameField = register("fullName", fullNameRules);
 
   // Birth date drives the age field: age is derived, never typed by hand.
   const birthDateRegistration = register("birthDate", { required: "La fecha de nacimiento es obligatoria." });
@@ -282,7 +283,13 @@ export default function ReportPage() {
               <TextField
                 label="Nombre completo"
                 hint="Escribe nombre y apellido como aparecen en documentos o como la familia los reconoce. Se aceptan tildes, ñ, dieresis, apostrofe, punto y guion."
-                registration={register("fullName", fullNameRules)}
+                registration={{
+                  ...fullNameField,
+                  onChange: (event) => {
+                    event.target.value = sanitizeFullName(event.target.value);
+                    return fullNameField.onChange(event);
+                  }
+                }}
                 error={errors.fullName?.message}
                 required
               />
