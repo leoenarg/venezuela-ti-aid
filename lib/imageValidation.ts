@@ -40,7 +40,7 @@ type NativeFaceDetector = {
 type FaceDetectorConstructor = new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => NativeFaceDetector;
 
 const MAX_ORIGINAL_BYTES = 5 * 1024 * 1024;
-const MIN_IMAGE_SIDE = 300;
+const MIN_IMAGE_SIDE = 200;
 const MAX_OUTPUT_SIDE = 1024;
 const OUTPUT_QUALITY = 0.78;
 const BLUR_VARIANCE_WARNING_THRESHOLD = 70;
@@ -90,7 +90,7 @@ export async function validateAndOptimizeImage(file: File): Promise<ImageValidat
     const sourceImage = await loadImage(sourceUrl);
 
     if (sourceImage.naturalWidth < MIN_IMAGE_SIDE || sourceImage.naturalHeight < MIN_IMAGE_SIDE) {
-      errors.push("La imagen es muy pequena. Usa una foto de al menos 300x300 px.");
+      errors.push("La imagen es muy pequena. Usa una foto de al menos 200x200 px.");
     }
 
     if (errors.length > 0) {

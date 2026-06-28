@@ -83,7 +83,10 @@ export default function ReportPage() {
     }
   };
 
-  const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
+  const isMinor = useMemo(() => {
+    const numericAge = Number(age);
+    return age !== "" && Number.isFinite(numericAge) && numericAge < 18;
+  }, [age]);
   const isPhotoBusy = photoStatus === "validating";
   const hasPhotoError = photoStatus === "error";
 
@@ -229,7 +232,15 @@ export default function ReportPage() {
         })
       });
 
-      if (!response.ok) throw new Error("Report API failed.");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        const detailText = Array.isArray(errorData?.details)
+          ? errorData.details.join(" ")
+          : typeof errorData?.error === "string"
+          ? errorData.error
+          : "No se pudo enviar el reporte.";
+        throw new Error(detailText);
+      }
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       reset();
@@ -240,8 +251,10 @@ export default function ReportPage() {
       setPhotoValidation(null);
       setPhotoStatus("idle");
       setStep(1);
-    } catch {
-      setMessage("No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
+    } catch (error) {
+      console.error("Report submission failed", error);
+      const errorMessage = error instanceof Error ? error.message : "No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.";
+      setMessage(errorMessage || "No se pudo enviar el reporte. Revisa la conexion e intenta de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
