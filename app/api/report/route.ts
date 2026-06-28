@@ -96,9 +96,10 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as ReportRequestBody;
-    const payloadErrors = getReportPayloadValidationErrors(body);
 
-    if (payloadErrors.length > 0) {
+    if (!isValidReportPayload(body)) {
+      const payloadErrors = getReportPayloadValidationErrors(body);
+
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
