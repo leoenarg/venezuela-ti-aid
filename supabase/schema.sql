@@ -189,7 +189,7 @@ grant execute on function public.get_public_stats() to anon;
 grant execute on function public.get_public_state_stats() to anon;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('person-photos', 'person-photos', true, 51200, array['image/jpeg'])
+values ('person-photos', 'person-photos', true, 1048576, array['image/jpeg', 'image/webp'])
 on conflict (id) do update
 set public = excluded.public,
     file_size_limit = excluded.file_size_limit,
@@ -202,5 +202,5 @@ for insert
 to anon
 with check (
   bucket_id = 'person-photos'
-  and lower(storage.extension(name)) in ('jpg', 'jpeg')
+  and lower(storage.extension(name)) in ('jpg', 'jpeg', 'webp')
 );

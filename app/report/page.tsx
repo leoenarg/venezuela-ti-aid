@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
-import { compressToGrayscaleJpeg } from "@/lib/imageCompression";
+import Image from "next/image";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ImageValidationResult, validateAndOptimizeImage } from "@/lib/imageValidation";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 import { LifeStatus, stateOptions, statusLabels } from "@/lib/venezuelaData";
 
@@ -23,16 +24,72 @@ export default function ReportPage() {
   const [lastKnownState, setLastKnownState] = useState("");
   const [lastKnownCity, setLastKnownCity] = useState("");
   const [lastKnownParish, setLastKnownParish] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
+  const [optimizedPhoto, setOptimizedPhoto] = useState<File | null>(null);
+  const [photoValidation, setPhotoValidation] = useState<ImageValidationResult | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<"idle" | "validating" | "error" | "success">("idle");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isMinor = useMemo(() => Number(age) > 0 && Number(age) < 18, [age]);
+  const isPhotoBusy = photoStatus === "validating";
+  const hasPhotoError = photoStatus === "error";
   const canContinue =
     (step === 1 && fullName.trim().length > 1 && cedula.trim().length > 3 && gender.length > 0) ||
-    (step === 2 && Number(age) >= 0 && birthDate.length > 0) ||
+    (step === 2 && Number(age) >= 0 && birthDate.length > 0 && !isPhotoBusy && !hasPhotoError) ||
     step === 3;
+
+  useEffect(() => {
+    return () => {
+      if (photoValidation?.previewUrl) {
+        URL.revokeObjectURL(photoValidation.previewUrl);
+      }
+    };
+  }, [photoValidation?.previewUrl]);
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0] ?? null;
+    setMessage("");
+    setOptimizedPhoto(null);
+
+    if (photoValidation?.previewUrl) {
+      URL.revokeObjectURL(photoValidation.previewUrl);
+    }
+
+    if (!selectedFile) {
+      setPhotoValidation(null);
+      setPhotoStatus("idle");
+      return;
+    }
+
+    setPhotoValidation(null);
+    setPhotoStatus("validating");
+    await logClientAuditEvent("UPLOAD_IMAGE_ATTEMPT", {
+      original_file_size: selectedFile.size,
+      mime_type: selectedFile.type
+    });
+
+    const result = await validateAndOptimizeImage(selectedFile);
+    setPhotoValidation(result);
+
+    if (!result.isValid || !result.optimizedFile) {
+      await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+        original_file_size: selectedFile.size,
+        mime_type: selectedFile.type,
+        validation_result: "rejected",
+        errors: result.errors,
+        warnings: result.warnings,
+        faces_detected: result.metadata.facesDetected,
+        nsfw_scores: result.metadata.nsfwScores
+      });
+      setOptimizedPhoto(null);
+      setPhotoStatus("error");
+      return;
+    }
+
+    setOptimizedPhoto(result.optimizedFile);
+    setPhotoStatus("success");
+  }
 
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,42 +103,77 @@ export default function ReportPage() {
 
       let imageUrl: string | null = null;
 
-      if (photo) {
-        const compressed = await compressToGrayscaleJpeg(photo);
-        const storagePath = `reports/${compressed.fileName}`;
+      if (hasPhotoError || isPhotoBusy) {
+        throw new Error("Photo validation is not complete.");
+      }
+
+      if (optimizedPhoto) {
+        const storagePath = `reports/${optimizedPhoto.name}`;
+        const imageHash = await sha256File(optimizedPhoto);
 
         const { error: uploadError } = await supabase.storage
           .from("person-photos")
-          .upload(storagePath, compressed.blob, {
-            contentType: "image/jpeg",
+          .upload(storagePath, optimizedPhoto, {
+            contentType: optimizedPhoto.type,
             upsert: false
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          await logClientAuditEvent("UPLOAD_IMAGE_REJECTED", {
+            reason: "storage_upload_error",
+            optimized_file_size: optimizedPhoto.size,
+            mime_type: optimizedPhoto.type,
+            image_hash: imageHash
+          });
+          throw uploadError;
+        }
 
         const publicUrl = supabase.storage.from("person-photos").getPublicUrl(storagePath);
         imageUrl = publicUrl.data.publicUrl;
+
+        await logClientAuditEvent("UPLOAD_IMAGE_SUCCESS", {
+          storage_path: storagePath,
+          optimized_file_size: optimizedPhoto.size,
+          mime_type: optimizedPhoto.type,
+          image_hash: imageHash,
+          faces_detected: photoValidation?.metadata.facesDetected,
+          nsfw_scores: photoValidation?.metadata.nsfwScores
+        });
       }
 
-      const { error } = await supabase.from("missing_persons").insert({
-        full_name: fullName.trim(),
-        cedula: cedula.trim(),
-        gender,
-        age: Number(age),
-        birth_date: birthDate,
-        status,
-        location_category: locationCategory,
-        location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
-        last_known_state: lastKnownState || null,
-        last_known_city: lastKnownCity.trim() || null,
-        last_known_parish: lastKnownParish.trim() || null,
-        image_url: imageUrl,
-        is_minor: isMinor,
-        accepted_terms: acceptedTerms,
-        terms_version: "2026-06-27"
+      const response = await fetch("/api/report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          cedula: cedula.trim(),
+          gender,
+          age: Number(age),
+          birth_date: birthDate,
+          status,
+          location_category: locationCategory,
+          location_detail: locationCategory === "Otro..." ? locationDetail.trim() : locationDetail.trim() || null,
+          last_known_state: lastKnownState || null,
+          last_known_city: lastKnownCity.trim() || null,
+          last_known_parish: lastKnownParish.trim() || null,
+          image_url: imageUrl,
+          is_minor: isMinor,
+          accepted_terms: acceptedTerms,
+          terms_version: "2026-06-27",
+          audit_metadata: optimizedPhoto
+            ? {
+                optimized_file_size: optimizedPhoto.size,
+                mime_type: optimizedPhoto.type,
+                faces_detected: photoValidation?.metadata.facesDetected,
+                nsfw_scores: photoValidation?.metadata.nsfwScores
+              }
+            : null
+        })
       });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error("Report API failed.");
 
       setMessage("Reporte enviado. Gracias por ayudar a una familia a encontrar informacion.");
       setFullName("");
@@ -95,7 +187,12 @@ export default function ReportPage() {
       setLastKnownState("");
       setLastKnownCity("");
       setLastKnownParish("");
-      setPhoto(null);
+      if (photoValidation?.previewUrl) {
+        URL.revokeObjectURL(photoValidation.previewUrl);
+      }
+      setOptimizedPhoto(null);
+      setPhotoValidation(null);
+      setPhotoStatus("idle");
       setAcceptedTerms(false);
       setStep(1);
     } catch {
@@ -119,6 +216,7 @@ export default function ReportPage() {
         <p className="mt-2 leading-7 text-neutral-700">
           Completa solo lo que conozcas con seguridad. La foto sera reducida en este dispositivo antes de subirla.
         </p>
+        <AuditNotice />
 
         <form className="mt-6 grid gap-5" onSubmit={submitReport}>
           {step === 1 ? (
@@ -155,12 +253,13 @@ export default function ReportPage() {
               <label className="grid gap-2 font-bold">
                 Foto opcional
                 <input
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className="focus-ring rounded-md border border-neutral-400 bg-white px-3 py-3"
-                  onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
+                  onChange={handlePhotoChange}
                   type="file"
                 />
               </label>
+              <PhotoValidationPanel result={photoValidation} status={photoStatus} />
             </section>
           ) : null}
 
@@ -237,10 +336,10 @@ export default function ReportPage() {
             ) : null}
             {step < 3 ? (
               <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white disabled:opacity-50" disabled={!canContinue} onClick={() => setStep((step + 1) as Step)} type="button">
-                Continuar
+                {isPhotoBusy ? "Validando foto..." : "Continuar"}
               </button>
             ) : (
-              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !acceptedTerms} type="submit">
+              <button className="focus-ring rounded-md bg-relief px-4 py-3 font-black text-white disabled:opacity-50" disabled={isSubmitting || !acceptedTerms || isPhotoBusy || hasPhotoError} type="submit">
                 {isSubmitting ? "Enviando..." : "Enviar Reporte"}
               </button>
             )}
@@ -251,6 +350,95 @@ export default function ReportPage() {
       </div>
     </main>
   );
+}
+
+function AuditNotice() {
+  return (
+    <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
+      Por seguridad y prevencion de abusos, esta plataforma registra auditoria tecnica minima sobre cargas, consultas,
+      visualizaciones y descargas. Puede incluir fecha, IP aproximada, navegador, accion realizada y registros
+      consultados, y preservarse ante requerimientos legales.
+    </p>
+  );
+}
+
+function PhotoValidationPanel({
+  result,
+  status
+}: {
+  result: ImageValidationResult | null;
+  status: "idle" | "validating" | "error" | "success";
+}) {
+  if (status === "idle") return null;
+
+  if (status === "validating") {
+    return <p className="rounded-md border border-neutral-300 bg-white p-3 text-sm font-bold text-neutral-700">Validando y optimizando la imagen...</p>;
+  }
+
+  return (
+    <div className="grid gap-3 rounded-md border border-neutral-300 bg-white p-3 text-sm">
+      {result?.previewUrl ? (
+        <Image
+          alt="Vista previa optimizada"
+          className="aspect-square w-32 rounded-md border border-neutral-300 object-cover"
+          height={128}
+          src={result.previewUrl}
+          unoptimized
+          width={128}
+        />
+      ) : null}
+
+      {result?.errors.map((error) => (
+        <p className="font-bold text-alert" key={error}>
+          {error}
+        </p>
+      ))}
+
+      {result?.warnings.map((warning) => (
+        <p className="font-semibold text-neutral-700" key={warning}>
+          {warning}
+        </p>
+      ))}
+
+      {result?.metadata.optimizedSize ? (
+        <p className="text-neutral-600">
+          Imagen optimizada: {formatBytes(result.metadata.optimizedSize)} / {result.metadata.width}x{result.metadata.height}px.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
+async function logClientAuditEvent(eventType: "UPLOAD_IMAGE_ATTEMPT" | "UPLOAD_IMAGE_SUCCESS" | "UPLOAD_IMAGE_REJECTED", metadata: Record<string, unknown>) {
+  try {
+    await fetch("/api/audit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        eventType,
+        entityType: "person_photo",
+        statusCode: eventType === "UPLOAD_IMAGE_REJECTED" ? 400 : 200,
+        metadata
+      })
+    });
+  } catch {
+    // Client-side audit is best-effort and must not block humanitarian reporting.
+  }
+}
+
+async function sha256File(file: File) {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function TextField({

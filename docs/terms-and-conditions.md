@@ -41,6 +41,12 @@ Forbidden uses include:
 
 The application may rely on third-party infrastructure providers such as Vercel, Supabase, and GitHub. These providers are not authorized by the project to misuse user data, but they may process data as necessary to host, store, secure, and operate the service under their own legal terms.
 
+## Defensive Technical Audit
+
+For safety and abuse prevention, the platform may keep minimized technical audit records about report creation, image upload events, exact searches, result views, downloads, and administrative actions. Audit records may include timestamp, approximate IP or IP hash, browser user-agent, request path, action type, status code, and minimized technical metadata.
+
+Audit records are intended for system integrity, abuse investigation, and lawful response to competent authorities. They must not be used for commercial profiling, political monitoring, advertising, invasive tracking, or unrelated surveillance.
+
 ## Removal and Correction
 
 Before production, the operator must publish a contact channel for correction, deletion, takedown, and abuse reports.

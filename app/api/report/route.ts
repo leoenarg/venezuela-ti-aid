@@ -1,0 +1,122 @@
+import { NextResponse } from "next/server";
+import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
+import { hasSupabaseServiceConfig, supabaseAdmin } from "@/lib/supabaseServer";
+
+type ReportRequestBody = {
+  full_name?: string;
+  cedula?: string;
+  gender?: string;
+  age?: number;
+  birth_date?: string;
+  status?: string;
+  location_category?: string;
+  location_detail?: string | null;
+  last_known_state?: string | null;
+  last_known_city?: string | null;
+  last_known_parish?: string | null;
+  image_url?: string | null;
+  is_minor?: boolean;
+  accepted_terms?: boolean;
+  terms_version?: string;
+  audit_metadata?: Record<string, unknown>;
+};
+
+export async function POST(request: Request) {
+  const requestId = createAuditRequestId();
+
+  if (!hasSupabaseServiceConfig) {
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      request,
+      requestId,
+      statusCode: 503,
+      metadata: { error: "missing_supabase_service_config" }
+    });
+
+    return NextResponse.json({ error: "El servicio no esta configurado para recibir reportes." }, { status: 503 });
+  }
+
+  try {
+    const body = (await request.json()) as ReportRequestBody;
+
+    if (!body.accepted_terms || !body.cedula || !body.birth_date || !body.full_name || typeof body.age !== "number") {
+      await logAuditEventSafely({
+        eventType: "CREATE_PERSON_REPORT",
+        request,
+        requestId,
+        statusCode: 400,
+        metadata: { error: "invalid_report_payload" }
+      });
+
+      return NextResponse.json({ error: "Faltan datos obligatorios para crear el reporte." }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("missing_persons")
+      .insert({
+        full_name: body.full_name.trim(),
+        cedula: body.cedula.trim(),
+        gender: body.gender,
+        age: body.age,
+        birth_date: body.birth_date,
+        status: body.status,
+        location_category: body.location_category,
+        location_detail: body.location_detail,
+        last_known_state: body.last_known_state,
+        last_known_city: body.last_known_city,
+        last_known_parish: body.last_known_parish,
+        image_url: body.image_url,
+        is_minor: body.is_minor,
+        accepted_terms: body.accepted_terms,
+        terms_version: body.terms_version
+      })
+      .select("id,status,is_minor,last_known_state")
+      .single();
+
+    if (error) {
+      await logAuditEventSafely({
+        eventType: "CREATE_PERSON_REPORT",
+        request,
+        requestId,
+        statusCode: 400,
+        metadata: {
+          error: error.code,
+          cedula_hash: hashAuditValue(body.cedula.trim()),
+          birth_date_hash: hashAuditValue(body.birth_date)
+        }
+      });
+
+      return NextResponse.json({ error: "No se pudo guardar el reporte." }, { status: 400 });
+    }
+
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      entityType: "missing_person",
+      entityId: data.id,
+      request,
+      requestId,
+      statusCode: 201,
+      metadata: {
+        status: data.status,
+        is_minor: data.is_minor,
+        last_known_state: data.last_known_state,
+        has_image: Boolean(body.image_url),
+        cedula_hash: hashAuditValue(body.cedula.trim()),
+        birth_date_hash: hashAuditValue(body.birth_date),
+        image: body.audit_metadata ?? null
+      }
+    });
+
+    return NextResponse.json({ id: data.id, requestId }, { status: 201 });
+  } catch {
+    await logAuditEventSafely({
+      eventType: "CREATE_PERSON_REPORT",
+      request,
+      requestId,
+      statusCode: 500,
+      metadata: { error: "unexpected_report_error" }
+    });
+
+    return NextResponse.json({ error: "No se pudo guardar el reporte." }, { status: 500 });
+  }
+}

@@ -1,0 +1,70 @@
+name: Validar Formato de Versión y Tag
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validar VERSION contra el siguiente tag esperado
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -f VERSION ]; then
+            echo "ERROR: Falta el archivo VERSION en la raíz del repositorio."
+            exit 1
+          fi
+
+          VERSION_EN_CODIGO=$(tr -d '\r\n' < VERSION)
+          echo "Contenido de VERSION: $VERSION_EN_CODIGO"
+
+          if [[ ! "$VERSION_EN_CODIGO" =~ ^v\.[0-9]+\.[0-9]{6}[a-z]$ ]]; then
+            echo "ERROR: VERSION debe usar el formato v.Numero.YYMMDDletra (por ejemplo v.0.260628a)."
+            exit 1
+          fi
+
+          HOY=$(date +'%y%m%d')
+          echo "Fecha de hoy calculada: $HOY"
+
+          ULTIMO_TAG=$(git tag --list 'v.*' | sort | tail -n 1 || true)
+          echo "Último tag encontrado en el repo: ${ULTIMO_TAG:-ninguno}"
+
+          if [ -n "$ULTIMO_TAG" ]; then
+            VERSION_PURA=${ULTIMO_TAG#v.}
+            NUMERO_TAG=${VERSION_PURA%%.*}
+            FECHA_Y_LETRA=${VERSION_PURA#*.}
+            FECHA_TAG=${FECHA_Y_LETRA:0:6}
+            LETRA_TAG=${FECHA_Y_LETRA:6:1}
+
+            if [ "$HOY" = "$FECHA_TAG" ]; then
+              SIGUIENTE_LETRA=$(python - <<'PY'
+import sys
+letra = sys.argv[1]
+print(chr(ord(letra) + 1))
+PY
+"$LETRA_TAG")
+              TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}${SIGUIENTE_LETRA}"
+            else
+              TAG_ESPERADO="v.${NUMERO_TAG}.${HOY}a"
+            fi
+          else
+            TAG_ESPERADO="v.0.${HOY}a"
+          fi
+
+          echo "El Pull Request debe usar el siguiente tag esperado: $TAG_ESPERADO"
+
+          if [ "$VERSION_EN_CODIGO" != "$TAG_ESPERADO" ]; then
+            echo "ERROR: El contenido de VERSION ($VERSION_EN_CODIGO) no coincide con el tag esperado ($TAG_ESPERADO)."
+            exit 1
+          fi
+
+          echo "Validación exitosa. La versión es correcta y consecutiva."

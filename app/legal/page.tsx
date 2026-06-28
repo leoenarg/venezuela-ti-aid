@@ -38,7 +38,7 @@ export default function LegalPage() {
               <li>Nombre completo, cedula, fecha de nacimiento, edad y genero.</li>
               <li>Estado de vida y ubicacion o institucion relacionada.</li>
               <li>Estado, ciudad y parroquia del ultimo lugar conocido cuando la persona reportante los conozca.</li>
-              <li>Foto opcional, reducida localmente a escala de grises antes de subirla.</li>
+              <li>Foto opcional, validada y optimizada localmente antes de subirla.</li>
             </ul>
           </LegalSection>
 
@@ -51,6 +51,19 @@ export default function LegalPage() {
             </p>
             <p>
               Para menores de edad, los resultados se reducen o enmascaran para evitar exposicion innecesaria.
+            </p>
+          </LegalSection>
+
+          <LegalSection title="Auditoria tecnica defensiva">
+            <p>
+              Por seguridad y prevencion de abusos, esta plataforma registra informacion tecnica de auditoria sobre
+              cargas, consultas, visualizaciones y descargas, incluyendo fecha, IP aproximada, navegador, accion
+              realizada y registros consultados.
+            </p>
+            <p>
+              Esta informacion se usa solo para proteger el sistema, investigar abuso, preservar integridad tecnica y
+              responder ante requerimientos legales de autoridades competentes. No se solicita GPS, contactos,
+              fingerprinting invasivo ni datos privados del dispositivo.
             </p>
           </LegalSection>
 
