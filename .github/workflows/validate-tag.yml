@@ -29,7 +29,7 @@ jobs:
       - name: Preparar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Fijar npm 10
@@ -120,7 +120,7 @@ jobs:
       - name: Preparar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Fijar npm 10
@@ -170,7 +170,7 @@ jobs:
       - name: Preparar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Fijar npm 10

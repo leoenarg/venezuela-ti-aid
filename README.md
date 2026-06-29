@@ -46,13 +46,13 @@ npm run dev
 Para evitar que `package-lock.json` se desincronice entre entornos, el proyecto fija:
 
 ```text
-Node 20.x
+Node 22.x
 npm 10.x
 ```
 
 Convencion del equipo:
 
-- Usa Node 20 para trabajar en el proyecto (`.nvmrc` y `.node-version` apuntan a `20`).
+- Usa Node 22 para trabajar en el proyecto (`.nvmrc` y `.node-version` apuntan a `22`).
 - No regeneres el lock con npm 11.
 - Si cambias dependencias, ejecuta:
 
