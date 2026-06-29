@@ -8,6 +8,13 @@ export function sanitizeCedula(value: string): string {
   return value.replace(/\D/g, "");
 }
 
+export function sanitizeFullName(value: string): string {
+  return Array.from(value)
+    .filter((character) => /[\p{L}\p{M} '\u2019.-]/u.test(character))
+    .join("")
+    .replace(/\s{2,}/g, " ");
+}
+
 /**
  * Calculates a whole-year age from an ISO birth date string (yyyy-mm-dd).
  * Returns "" when the date is empty, invalid, or in the future, so the
@@ -29,6 +36,20 @@ export function calculateAge(birthDate: string): string {
   if (age < 0) return "";
   return String(age);
 }
+
+export const fullNamePattern = /^\p{L}[\p{L}\p{M}]*(?:[ '\u2019.-]\p{L}[\p{L}\p{M}]*)+$/u;
+
+export const fullNameRules = {
+  required: "El nombre completo es obligatorio.",
+  minLength: {
+    value: 2,
+    message: "Ingresa el nombre completo."
+  },
+  pattern: {
+    value: fullNamePattern,
+    message: "Usa solo nombres y apellidos con letras, espacios, tildes, ñ, dieresis, apostrofe, punto o guion."
+  }
+} satisfies RegisterOptions;
 
 /**
  * react-hook-form validation rules for the cedula field.

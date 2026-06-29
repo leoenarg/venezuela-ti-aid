@@ -10,10 +10,10 @@ export type VenezuelaState = {
 };
 
 export const statusLabels: Record<LifeStatus, string> = {
-  missing: "Perdidas",
+  missing: "Extraviada",
   found_alive: "Encontradas",
   deceased: "Fallecidas",
-  critical_health: "Salud delicada"
+  critical_health: "Bajo supervision medica"
 };
 
 export const riskLabels: Record<StateRisk, string> = {

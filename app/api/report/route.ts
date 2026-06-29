@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { createAuditRequestId, hashAuditValue, logAuditEventSafely } from "@/lib/audit";
+import { fullNamePattern } from "@/lib/formHelpers";
 import { hasSupabaseConfig, supabase } from "@/lib/supabaseClient";
 
 type ReportRequestBody = {
@@ -49,6 +51,8 @@ function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
   }
   if (typeof body.full_name !== "string" || body.full_name.trim().length === 0) {
     errors.push("full_name es obligatoria.");
+  } else if (!fullNamePattern.test(body.full_name.trim())) {
+    errors.push("full_name solo puede contener letras, espacios, tildes, apostrofe, punto o guion.");
   }
   if (typeof body.birth_date !== "string" || body.birth_date.trim().length === 0) {
     errors.push("birth_date es obligatoria.");
@@ -77,6 +81,61 @@ function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
 
 function isValidReportPayload(body: ReportRequestBody): body is ValidReportPayload {
   return getReportPayloadValidationErrors(body).length === 0;
+}
+
+type ReportInsertErrorInfo = {
+  code: string;
+  message: string;
+  status: number;
+};
+
+function classifyReportInsertError(error: { code?: string; details?: string | null; message?: string | null }): ReportInsertErrorInfo {
+  const code = error.code ?? "unknown_insert_error";
+  const details = `${error.details ?? ""} ${error.message ?? ""}`.toLowerCase();
+
+  if (code === "23505" || details.includes("duplicate")) {
+    return {
+      code: "REPORT_ALREADY_EXISTS",
+      message: "Ya existe un reporte con la misma cedula y fecha de nacimiento.",
+      status: 409
+    };
+  }
+
+  if (code === "42501" || details.includes("row-level security") || details.includes("permission denied")) {
+    return {
+      code: "REPORT_RLS_DENIED",
+      message: "La base de datos no permite guardar este reporte. Revisa las politicas RLS del ambiente.",
+      status: 400
+    };
+  }
+
+  if (
+    ["22P02", "42P01", "42703", "42804", "42883", "PGRST204", "PGRST205"].includes(code) ||
+    details.includes("schema cache") ||
+    details.includes("column") ||
+    details.includes("relation") ||
+    details.includes("does not exist")
+  ) {
+    return {
+      code: "REPORT_SCHEMA_OUTDATED",
+      message: "La base de datos del ambiente no esta actualizada. Ejecuta el schema.sql en Supabase.",
+      status: 400
+    };
+  }
+
+  if (code === "23514" || details.includes("check constraint")) {
+    return {
+      code: "REPORT_CONSTRAINT_FAILED",
+      message: "El reporte tiene un dato que no cumple las reglas de validacion.",
+      status: 400
+    };
+  }
+
+  return {
+    code: "REPORT_INSERT_FAILED",
+    message: "No se pudo guardar el reporte. Revisa la configuracion de Supabase del ambiente.",
+    status: 400
+  };
 }
 
 export async function POST(request: Request) {
@@ -117,9 +176,11 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const reportId = randomUUID();
+    const { error } = await supabase
       .from("missing_persons")
       .insert({
+        id: reportId,
         full_name: body.full_name.trim(),
         cedula: body.cedula.trim(),
         gender: body.gender,
@@ -135,47 +196,51 @@ export async function POST(request: Request) {
         is_minor: body.is_minor,
         accepted_terms: body.accepted_terms,
         terms_version: body.terms_version
-      })
-      .select("id,status,is_minor,last_known_state")
-      .single();
+      });
 
     if (error) {
-      const duplicateReport =
-        error.code === "23505" ||
-        String(error.details).toLowerCase().includes("duplicate") ||
-        String(error.details).toLowerCase().includes("cedula") && String(error.details).toLowerCase().includes("birth_date");
-      const errorMessage = duplicateReport
-        ? "Ya existe un reporte con la misma cedula y fecha de nacimiento."
-        : "No se pudo guardar el reporte.";
-      const responseStatus = duplicateReport ? 409 : 400;
+      const insertError = classifyReportInsertError(error);
+
+      console.error("Report insert failed", {
+        requestId,
+        code: error.code,
+        classification: insertError.code,
+        message: error.message,
+        details: error.details
+      });
 
       await logAuditEventSafely({
         eventType: "CREATE_PERSON_REPORT",
         request,
         requestId,
-        statusCode: responseStatus,
+        statusCode: insertError.status,
         metadata: {
           error: error.code ?? "unknown_insert_error",
+          classification: insertError.code,
           details: error.details ?? error.message,
           cedula_hash: hashAuditValue(body.cedula.trim()),
           birth_date_hash: hashAuditValue(body.birth_date)
         }
       });
 
-      return NextResponse.json({ error: errorMessage }, { status: responseStatus });
+      return NextResponse.json({
+        error: insertError.message,
+        code: insertError.code,
+        requestId
+      }, { status: insertError.status });
     }
 
     await logAuditEventSafely({
       eventType: "CREATE_PERSON_REPORT",
       entityType: "missing_person",
-      entityId: data.id,
+      entityId: reportId,
       request,
       requestId,
       statusCode: 201,
       metadata: {
-        status: data.status,
-        is_minor: data.is_minor,
-        last_known_state: data.last_known_state,
+        status: body.status,
+        is_minor: body.is_minor,
+        last_known_state: body.last_known_state,
         has_image: Boolean(body.image_url),
         cedula_hash: hashAuditValue(body.cedula.trim()),
         birth_date_hash: hashAuditValue(body.birth_date),
@@ -183,7 +248,7 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ id: data.id, requestId }, { status: 201 });
+    return NextResponse.json({ id: reportId, requestId }, { status: 201 });
   } catch {
     await logAuditEventSafely({
       eventType: "CREATE_PERSON_REPORT",

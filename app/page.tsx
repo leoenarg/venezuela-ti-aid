@@ -14,10 +14,10 @@ const fallbackStats: PublicStats = {
 };
 
 const statLabels = [
-  ["Personas perdidas", "total_missing"],
+  ["Personas extraviadas", "total_missing"],
   ["Encontradas con vida", "found_alive"],
   ["Fallecidas", "deceased"],
-  ["Salud delicada", "critical_health"]
+  ["Bajo supervision medica", "critical_health"]
 ] as const;
 
 export default function HomePage() {
@@ -53,6 +53,12 @@ export default function HomePage() {
             <Link className="focus-ring underline" href="/legal">
               Legal
             </Link>
+            <Link className="focus-ring underline" href="/legal/request">
+              Autoridades
+            </Link>
+            <a className="focus-ring underline" href="mailto:venezuelatiaid@gmail.com">
+              Contacto
+            </a>
             <button className="focus-ring underline" onClick={() => setTermsOpen(true)} type="button">
               Resumen
             </button>
@@ -112,6 +118,17 @@ function TermsModal({ onClose }: { onClose: () => void }) {
         </p>
         <p className="mt-3 leading-7 text-neutral-700">
           Toda busqueda requiere coincidencia exacta de cedula y fecha de nacimiento. El mal uso de la plataforma puede poner en riesgo a personas vulnerables.
+        </p>
+        <p className="mt-3 leading-7 text-neutral-700">
+          Las solicitudes de autoridades con orden judicial se registran por un portal separado y nunca habilitan
+          descargas automaticas sin revision humana.
+        </p>
+        <p className="mt-3 leading-7 text-neutral-700">
+          Contacto para informacion, denuncias, correcciones o consultas sobre donaciones:{" "}
+          <a className="font-black text-signal underline" href="mailto:venezuelatiaid@gmail.com">
+            venezuelatiaid@gmail.com
+          </a>
+          .
         </p>
         <Link className="focus-ring mt-5 block rounded-md border-2 border-ink px-4 py-3 text-center font-bold" href="/legal" onClick={onClose}>
           Ver terminos completos

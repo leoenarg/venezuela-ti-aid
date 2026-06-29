@@ -20,10 +20,19 @@ Contributors must:
 - Never commit `.env.local`.
 - Avoid logging submitted data.
 - Keep dependencies minimal.
+- Use Node 20.x and npm 10.x. Do not regenerate `package-lock.json` with npm 11.
 - Run lint and build before pushing.
 - Keep `VERSION` synchronized with the next expected `v.Numero.YYMMDDletra` tag when opening pull requests to `main`, if the tag validation workflow is enabled.
 - Preserve RLS and exact-match search behavior.
+- Keep report creation compatible with RLS: do not add anonymous post-insert `SELECT` reads from `missing_persons`.
+- Preserve client-side and server-side name validation for normal name characters only.
 - Report suspected vulnerabilities privately.
+
+Private operational contact for vulnerabilities, abuse reports, correction/removal requests, collaboration, and donation-related questions:
+
+```text
+venezuelatiaid@gmail.com
+```
 
 ## Pull Requests and Ownership
 
@@ -32,6 +41,8 @@ Pull requests into `main` are checked by GitHub Actions. The current workflow va
 The repository uses `.github/CODEOWNERS` for ownership review. Changes to privacy, Supabase schema, audit logging, RLS, storage policy, legal text, or deployment configuration should be reviewed by a code owner before merging.
 
 Normal changes should flow through `feature/* -> preview -> main`. Pull requests into `preview` validate lint/build and should be tested against the preview Supabase project with synthetic data. Pull requests into `main` require production release review and VERSION validation.
+
+Legal request or export changes require code-owner review and human legal/privacy review. The portal `/legal/request` is intake-only; contributors must not add automatic downloads, public export links, or unauthenticated delivery flows.
 
 ## AI Assistant Rules
 
@@ -48,6 +59,7 @@ Do not contribute features for:
 - Public people directories.
 - Name search.
 - Bulk exports.
+- Automatic legal downloads or public export links.
 - Tracking scripts.
 - Facial recognition.
 - Political scoring.
@@ -65,6 +77,8 @@ Before merging privacy-sensitive changes:
 - Is it protected by RLS or RPC boundaries?
 - Does it preserve defensive audit logging without adding invasive tracking?
 - Does it affect minors?
+- Does it reveal minor photos or details outside assisted verification?
 - Does it create a scraping path?
 - Does it introduce a new provider or data transfer?
+- Does it create, approve, deny, or deliver legal authority requests?
 - Does the PR satisfy version/tag validation requirements?

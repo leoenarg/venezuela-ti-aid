@@ -7,10 +7,10 @@ import { SearchResult } from "@/lib/supabaseClient";
 import { cedulaRules, sanitizeCedula } from "@/lib/formHelpers";
 
 const statusLabels: Record<string, string> = {
-  missing: "Persona perdida",
+  missing: "Persona extraviada",
   found_alive: "Encontrada con vida",
   deceased: "Fallecida",
-  critical_health: "Salud delicada"
+  critical_health: "Bajo supervision medica"
 };
 
 type SearchFormValues = {
@@ -77,6 +77,10 @@ export default function SearchPage() {
 
         <h1 className="text-3xl font-black">Buscar un Familiar</h1>
         <p className="mt-2 leading-7 text-neutral-700">Por seguridad, solo se muestran resultados con cedula y fecha de nacimiento exactas.</p>
+        <p className="mt-2 leading-7 text-neutral-700">
+          En reportes de menores de edad, la imagen y detalles sensibles quedan restringidos. La confirmacion visual debe
+          hacerla un operador autorizado con el familiar o responsable legal.
+        </p>
         <p className="mt-4 rounded-md border border-neutral-300 bg-white p-3 text-sm font-semibold leading-6 text-neutral-700">
           Por seguridad y prevencion de abusos, esta consulta registra auditoria tecnica minima: fecha, IP aproximada,
           navegador, accion realizada y si hubo coincidencia exacta.
@@ -94,6 +98,7 @@ export default function SearchPage() {
                 cedulaField.onChange(event);
               }}
             />
+            <span className="text-sm font-normal text-neutral-600">Solo numeros, sin puntos ni guiones. Debe coincidir exactamente con el reporte.</span>
             {errors.cedula ? <span className="text-sm font-semibold text-alert">{errors.cedula.message}</span> : null}
           </label>
           <label className="grid gap-2 font-bold">
@@ -103,6 +108,7 @@ export default function SearchPage() {
               type="date"
               {...register("birthDate", { required: "La fecha de nacimiento es obligatoria." })}
             />
+            <span className="text-sm font-normal text-neutral-600">Usa la fecha exacta de nacimiento de la persona buscada.</span>
             {errors.birthDate ? <span className="text-sm font-semibold text-alert">{errors.birthDate.message}</span> : null}
           </label>
           <button className="focus-ring rounded-md bg-signal px-4 py-3 font-black text-white" disabled={isSearching} type="submit">
@@ -121,7 +127,15 @@ export default function SearchPage() {
             ) : null}
             <p className="text-sm font-bold uppercase text-neutral-600">{statusLabels[result.status] ?? result.status}</p>
             <h2 className="mt-1 text-2xl font-black">{result.full_name}</h2>
-            {result.is_minor ? <p className="mt-2 text-sm font-bold text-alert">Informacion limitada por proteccion de menor de edad.</p> : null}
+            {result.is_minor ? (
+              <div className="mt-3 rounded-md border border-alert bg-red-50 p-3 text-sm leading-6 text-alert">
+                <p className="font-black">Informacion limitada por proteccion de menor de edad.</p>
+                <p className="mt-1 font-semibold">
+                  Para confirmar la foto, el flujo recomendado es verificacion asistida: el familiar aporta datos exactos,
+                  un operador autorizado revisa la imagen en un canal privado y solo confirma o descarta la coincidencia.
+                </p>
+              </div>
+            ) : null}
             <dl className="mt-4 grid gap-3">
               <div>
                 <dt className="text-sm font-bold text-neutral-600">Ubicacion</dt>

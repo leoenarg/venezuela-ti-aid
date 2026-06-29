@@ -31,18 +31,26 @@ Production Supabase:
 
 - Used only by Vercel Production.
 - Must have `supabase/schema.sql` and `supabase/audit.sql` applied.
+- Must have `supabase/legal-requests.sql` applied before enabling `/legal/request`.
 - Holds real data.
 
 Preview Supabase:
 
 - Used only by Vercel Preview.
 - Must have `supabase/schema.sql` and `supabase/audit.sql` applied.
+- Must have `supabase/legal-requests.sql` applied for legal request smoke tests.
 - Must use synthetic records.
 - Should have a different `AUDIT_SALT` from production.
 
 ## Vercel
 
 Set environment variables by Vercel environment.
+
+Runtime convention:
+
+- Node 20.x
+- npm 10.x
+- `package-lock.json` must be generated with npm 10, matching GitHub Actions.
 
 Production:
 
@@ -139,10 +147,11 @@ Before merging `preview` into `main`:
 1. Confirm preview deployment uses preview Supabase.
 2. Run a synthetic report and exact search in preview.
 3. Confirm audit events are written in preview Supabase.
-4. Update `VERSION` to the expected `v.Numero.YYMMDDletra`.
-5. Open PR from `preview` to `main`.
-6. Wait for `Lint y build` and `Validar VERSION`.
-7. Merge.
-8. Confirm GitHub Actions deployed production.
-9. Smoke test production.
-10. Create and push the matching git tag.
+4. If legal intake changed, submit a synthetic `/legal/request` test and confirm no data download is exposed.
+5. Update `VERSION` to the expected `v.Numero.YYMMDDletra`.
+6. Open PR from `preview` to `main`.
+7. Wait for `Lint y build` and `Validar VERSION`.
+8. Merge.
+9. Confirm GitHub Actions deployed production.
+10. Smoke test production.
+11. Create and push the matching git tag.

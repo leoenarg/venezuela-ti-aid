@@ -12,16 +12,18 @@ Aplicacion humanitaria, mobile-first y privacy-first para reportar y buscar pers
 ## Rutas
 
 - `/` tablero publico con contadores livianos y acciones principales.
-- `/report` formulario multi-paso con validacion local de imagenes, deteccion de rostro, filtro NSFW y optimizacion antes de subir.
+- `/report` formulario multi-paso con validacion de nombre en castellano/ingles comun, validacion local de imagenes, deteccion de rostro, filtro NSFW y optimizacion antes de subir.
 - `/search` busqueda exacta por cedula y fecha de nacimiento, auditada desde API server-side.
 - `/legal` terminos, privacidad, reglas de colaboracion y aviso de proveedores.
+- `/legal/request` portal de recepcion de solicitudes legales con orden judicial. No entrega datos automaticamente.
 
 ## Configuracion
 
 1. Crea un proyecto gratuito en Supabase.
 2. Ejecuta `supabase/schema.sql` en el SQL editor.
 3. Ejecuta `supabase/audit.sql` en el SQL editor para crear la auditoria defensiva append-only.
-4. Copia `.env.example` a `.env.local` y completa:
+4. Ejecuta `supabase/legal-requests.sql` para habilitar el registro restringido de solicitudes legales.
+5. Copia `.env.example` a `.env.local` y completa:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
@@ -32,16 +34,72 @@ AUDIT_SALT=
 
 `SUPABASE_SERVICE_ROLE_KEY` y `AUDIT_SALT` son solo de servidor. No deben usarse en componentes cliente ni exponerse como `NEXT_PUBLIC_*`.
 
-5. Instala dependencias y levanta la app:
+6. Instala dependencias y levanta la app:
 
 ```bash
 npm install
 npm run dev
 ```
 
+## Version de Node y npm
+
+Para evitar que `package-lock.json` se desincronice entre entornos, el proyecto fija:
+
+```text
+Node 20.x
+npm 10.x
+```
+
+Convencion del equipo:
+
+- Usa Node 20 para trabajar en el proyecto (`.nvmrc` y `.node-version` apuntan a `20`).
+- No regeneres el lock con npm 11.
+- Si cambias dependencias, ejecuta:
+
+```bash
+npx npm@10 install
+```
+
+- Para verificar como GitHub Actions:
+
+```bash
+npx npm@10 ci
+npm run lint
+npm run build
+```
+
 ## Seguridad
 
 El cliente anonimo puede subir fotos optimizadas al bucket permitido, pero no puede listar registros. La creacion de reportes y la busqueda exacta pasan por rutas API server-side para registrar auditoria tecnica. La busqueda usa la funcion `search_missing_person`, que solo devuelve una fila cuando coinciden exactamente `cedula` y `birth_date`.
+
+La ruta `/api/report` inserta reportes sin encadenar un `SELECT` posterior, porque las lecturas anonimas directas estan bloqueadas por RLS. Si se necesita devolver un identificador, el servidor genera el UUID antes del insert.
+
+Los nombres se filtran y validan para aceptar letras Unicode, tildes, `ñ`, dieresis, apostrofe, punto, guion y espacios. No se aceptan numeros ni simbolos ajenos a nombres comunes.
+
+Los estados visibles al usuario son:
+
+- `missing`: Extraviada.
+- `found_alive`: Encontradas / Encontrada con vida.
+- `deceased`: Fallecidas / Fallecida.
+- `critical_health`: Bajo supervision medica.
+
+Para menores de edad, la busqueda exacta no muestra foto ni detalles sensibles. La confirmacion visual debe realizarse mediante verificacion asistida por un operador autorizado y en canal privado.
+
+## Solicitudes legales
+
+`/legal/request` permite registrar solicitudes de autoridades con orden judicial o instrumento legal equivalente. El portal genera un folio y guarda la solicitud en `legal.data_requests` mediante service role. No habilita descargas automaticas, no crea links publicos de descarga y no sustituye la revision humana.
+
+El procedimiento operativo esta documentado en `docs/legal-data-requests.md`. Cualquier entrega debe quedar limitada al alcance de la orden, revisada por una persona autorizada, auditada y enviada por un canal seguro.
+
+## Contacto
+
+Correo operativo del proyecto:
+
+```text
+venezuelatiaid@gmail.com
+```
+
+Puede usarse para informacion general, reportar abusos, pedir correcciones o retiro de informacion, denunciar reportes falsos, coordinar colaboracion humanitaria y consultar sobre posibles donaciones. Las donaciones o apoyos futuros no otorgan acceso a datos personales ni privilegios dentro del sistema.
 
 ## Auditoria defensiva
 
@@ -63,6 +121,10 @@ Eventos preparados para futuros flujos admin o descargas:
 - `DOWNLOAD_REPORT`
 - `ADMIN_REVIEW_APPROVED`
 - `ADMIN_REVIEW_REJECTED`
+- `LEGAL_DATA_REQUEST_SUBMITTED`
+- `LEGAL_DATA_REQUEST_REJECTED`
+- `LEGAL_EXPORT_CREATED`
+- `LEGAL_EXPORT_DENIED`
 - `AUDIT_EXPORT`
 
 La auditoria guarda IP aproximada y `ip_hash`, headers tecnicos minimos, ruta, metodo, status y metadata minimizada. No solicita GPS, contactos, fingerprinting invasivo ni cookies de terceros.
@@ -75,6 +137,7 @@ La auditoria guarda IP aproximada y `ip_hash`, headers tecnicos minimos, ruta, m
 - `docs/terms-and-conditions.md` contiene una base de terminos de uso.
 - `docs/collaboration-policy.md` define reglas para colaboradores y uso de IA.
 - `docs/environments.md` define ramas, Supabase production/preview, Vercel y rulesets.
+- `docs/legal-data-requests.md` define el flujo para solicitudes de autoridades con orden judicial.
 - `docs/service-provider-risk-review.md` resume riesgos y links de Vercel, Supabase y GitHub.
 - `.github/CODEOWNERS` define revisores responsables para cambios del repositorio.
 - `.github/workflows/validate-tag.yml` valida en pull requests hacia `main` que la version esperada sea consecutiva segun el ultimo tag `v.Numero.YYMMDDletra`.
