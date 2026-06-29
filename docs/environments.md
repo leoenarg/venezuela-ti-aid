@@ -46,6 +46,12 @@ Preview Supabase:
 
 Set environment variables by Vercel environment.
 
+Runtime convention:
+
+- Node 20.x
+- npm 10.x
+- `package-lock.json` must be generated with npm 10, matching GitHub Actions.
+
 Production:
 
 ```env

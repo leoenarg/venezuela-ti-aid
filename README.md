@@ -41,6 +41,33 @@ npm install
 npm run dev
 ```
 
+## Version de Node y npm
+
+Para evitar que `package-lock.json` se desincronice entre entornos, el proyecto fija:
+
+```text
+Node 20.x
+npm 10.x
+```
+
+Convencion del equipo:
+
+- Usa Node 20 para trabajar en el proyecto (`.nvmrc` y `.node-version` apuntan a `20`).
+- No regeneres el lock con npm 11.
+- Si cambias dependencias, ejecuta:
+
+```bash
+npx npm@10 install
+```
+
+- Para verificar como GitHub Actions:
+
+```bash
+npx npm@10 ci
+npm run lint
+npm run build
+```
+
 ## Seguridad
 
 El cliente anonimo puede subir fotos optimizadas al bucket permitido, pero no puede listar registros. La creacion de reportes y la busqueda exacta pasan por rutas API server-side para registrar auditoria tecnica. La busqueda usa la funcion `search_missing_person`, que solo devuelve una fila cuando coinciden exactamente `cedula` y `birth_date`.

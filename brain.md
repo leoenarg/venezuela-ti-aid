@@ -29,6 +29,7 @@ This project handles sensitive personal data. Treat every change as safety-criti
 - Vercel deployment from GitHub
 - GitHub Actions for PR/version validation
 - Two Supabase environments: production in the owner account, preview in a trusted collaborator account.
+- Runtime convention: Node 20.x and npm 10.x. Do not regenerate `package-lock.json` with npm 11.
 
 ## Important Routes
 
@@ -100,6 +101,16 @@ The home page shows a free veterinary care directory via `components/VetClinicsD
    - search result masking
    - legal/privacy text when relevant
    - this file if the field changes risk
+
+## Dependency Lockfile Notes
+
+`package.json` declares `packageManager: npm@10.9.8`, and `.nvmrc` / `.node-version` pin Node 20. GitHub Actions uses Node 20, so lockfile updates must be made with npm 10:
+
+```text
+npx npm@10 install
+```
+
+Do not run plain `npm install` from npm 11 when changing dependencies; it can rewrite peer/optional dependency metadata and make `npm ci` fail in CI.
 
 ## Image Upload Notes
 

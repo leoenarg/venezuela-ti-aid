@@ -20,6 +20,7 @@ Contributors must:
 - Never commit `.env.local`.
 - Avoid logging submitted data.
 - Keep dependencies minimal.
+- Use Node 20.x and npm 10.x. Do not regenerate `package-lock.json` with npm 11.
 - Run lint and build before pushing.
 - Keep `VERSION` synchronized with the next expected `v.Numero.YYMMDDletra` tag when opening pull requests to `main`, if the tag validation workflow is enabled.
 - Preserve RLS and exact-match search behavior.
