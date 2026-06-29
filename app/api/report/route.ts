@@ -51,8 +51,6 @@ function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
   }
   if (typeof body.full_name !== "string" || body.full_name.trim().length === 0) {
     errors.push("full_name es obligatoria.");
-  } else if (!fullNamePattern.test(body.full_name.trim())) {
-    errors.push("full_name solo puede contener letras, espacios, tildes, apostrofe, punto o guion.");
   }
   if (typeof body.birth_date !== "string" || body.birth_date.trim().length === 0) {
     errors.push("birth_date es obligatoria.");
@@ -81,61 +79,6 @@ function getReportPayloadValidationErrors(body: ReportRequestBody): string[] {
 
 function isValidReportPayload(body: ReportRequestBody): body is ValidReportPayload {
   return getReportPayloadValidationErrors(body).length === 0;
-}
-
-type ReportInsertErrorInfo = {
-  code: string;
-  message: string;
-  status: number;
-};
-
-function classifyReportInsertError(error: { code?: string; details?: string | null; message?: string | null }): ReportInsertErrorInfo {
-  const code = error.code ?? "unknown_insert_error";
-  const details = `${error.details ?? ""} ${error.message ?? ""}`.toLowerCase();
-
-  if (code === "23505" || details.includes("duplicate")) {
-    return {
-      code: "REPORT_ALREADY_EXISTS",
-      message: "Ya existe un reporte con la misma cedula y fecha de nacimiento.",
-      status: 409
-    };
-  }
-
-  if (code === "42501" || details.includes("row-level security") || details.includes("permission denied")) {
-    return {
-      code: "REPORT_RLS_DENIED",
-      message: "La base de datos no permite guardar este reporte. Revisa las politicas RLS del ambiente.",
-      status: 400
-    };
-  }
-
-  if (
-    ["22P02", "42P01", "42703", "42804", "42883", "PGRST204", "PGRST205"].includes(code) ||
-    details.includes("schema cache") ||
-    details.includes("column") ||
-    details.includes("relation") ||
-    details.includes("does not exist")
-  ) {
-    return {
-      code: "REPORT_SCHEMA_OUTDATED",
-      message: "La base de datos del ambiente no esta actualizada. Ejecuta el schema.sql en Supabase.",
-      status: 400
-    };
-  }
-
-  if (code === "23514" || details.includes("check constraint")) {
-    return {
-      code: "REPORT_CONSTRAINT_FAILED",
-      message: "El reporte tiene un dato que no cumple las reglas de validacion.",
-      status: 400
-    };
-  }
-
-  return {
-    code: "REPORT_INSERT_FAILED",
-    message: "No se pudo guardar el reporte. Revisa la configuracion de Supabase del ambiente.",
-    status: 400
-  };
 }
 
 export async function POST(request: Request) {
